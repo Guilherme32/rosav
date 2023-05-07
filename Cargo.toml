@@ -1,0 +1,19 @@
+[package]
+name = "osa"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+sycamore = { version = "0.8.2", features = ["suspense"] }
+itertools = "0.10.5"
+
+serde-wasm-bindgen = "0.4.3"
+js-sys = "0.3.59"
+serde = { version = "1.0.140", features = ["derive"] }
+wasm-bindgen = { version = "0.2.84", features = ["serde-serialize"] }
+wasm-bindgen-futures = "0.4.32"
+
+gloo-timers = { version = "0.2.6", features = ["futures"] }
+
