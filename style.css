@@ -1,0 +1,72 @@
+.test {
+  background-color: indigo;
+  color: white;
+}
+
+.wrapped {
+  background-color: black;
+  color: white;
+}
+
+* {
+  padding: 0;
+  margin: 0;
+}
+
+.horizontal-container {
+  height: calc(100vh - 10px);
+  margin: 5px;
+  display: flex;
+  flex-direction: line;
+}
+
+.vertical-container {
+  margin: 5px;
+  margin-bottom: 0px;
+  margin-top: 0px;
+  display: flex;
+  flex-direction: column;
+}
+
+.lower-bar {
+  margin-top: 5px;
+  min-height: 32px;
+  height: 32px;
+  background-color: lightgreen;
+}
+
+.side-bar {
+  min-width: 200px;
+  width: 200px;
+  background-color: lightblue;
+
+  display: flex;
+  flex-direction: column;
+}
+
+.side-bar-main {
+  height: calc(100vh - 15px - 200px);
+  background-color: orchid;
+}
+
+.log-space {
+  margin-top: 5px;
+  height: 200px;
+  background-color: pink;
+  font-size: 0.7rem;
+  font-family: "Cascadia Code";
+
+  display: flex;
+  flex-direction: column;
+  justify-content: end;
+  
+  overflow: hidden;
+}
+
+.graph-space {
+  width: calc(100vw - 15px - 200px);
+  min-height: calc(100vh - 15px - 32px);
+  height: calc(100vh - 15px - 32px);
+  background-color: lightgray;
+}
+
