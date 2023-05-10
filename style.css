@@ -1,3 +1,8 @@
+@font-face {
+  font-family: "Caskaydia Cove";
+  src: url("fonts/CaskaydiaCoveNerdFont-Regular.ttf");
+}
+
 .test {
   background-color: indigo;
   color: white;
@@ -11,6 +16,7 @@
 * {
   padding: 0;
   margin: 0;
+  font-family: "Caskaydia Cove";
 }
 
 .horizontal-container {
@@ -38,23 +44,105 @@
 .side-bar {
   min-width: 200px;
   width: 200px;
-  background-color: lightblue;
+  // background-color: lightblue;
 
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.side-bar-main {
+  height: calc(100vh - 22px - 200px);
+  border: 2px solid black;
+  display: flex;
+  flex-direction: column;
+  // background-color: orchid;
+  // overflow: hidden;
+}
+
+.title {
+  background-color: black;
+  color: white;
+  text-align: center;
+}
+
+.trace-container {
+  flex: 1;
+  overflow: hidden;
+}
+
+.trace-paging {
+  display: flex;
+  flex-direction: line;
+  justify-content: space-between;
+
+  border-top: 2px solid black;
+  padding: 3px;
+}
+
+.trace {
+  display: flex;
+  flex-direction: line;
+  justify-content: space-between;
+  border: 1px solid gray;
+  margin: 2px;
+  background-color: white;
+}
+
+.trace .name {
+  margin: 0px 2px;
+  font-size: 2rem;
+  color: darkgreen;
+}
+
+.trace .status {
+  text-align: center;
+  vertical-align: middle;
+  margin: auto;
+}
+
+.trace .separator {
+  font-size: 2rem;
+}
+
+.trace .buttons {
   display: flex;
   flex-direction: column;
 }
 
-.side-bar-main {
-  height: calc(100vh - 15px - 200px);
-  background-color: orchid;
+button {
+  background-color: white;
+  border: 1px solid gray;
+  margin: auto;
+  padding: 1px 3px;
+}
+
+button:hover {
+  background-color: lightgray;
+}
+
+button:active {
+  background-color: gray;
+}
+
+.trace .buttons button {
+  width: 90px;
+  text-align: left;
+}
+
+.side-bar-log {
+  border: 2px solid black;
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 .log-space {
+  flex: 1;
+  padding: 2px;
   margin-top: 5px;
-  height: 200px;
-  background-color: pink;
   font-size: 0.7rem;
-  font-family: "Cascadia Code";
 
   display: flex;
   flex-direction: column;
@@ -69,4 +157,3 @@
   height: calc(100vh - 15px - 32px);
   background-color: lightgray;
 }
-

@@ -99,7 +99,72 @@ fn SideBar<G:Html>(cx: Scope) -> View<G> {
 fn SideBarMain<G:Html>(cx: Scope) -> View<G> {
     view! { cx,
         div(class="side-bar-main") {
-            "SideBar"
+            p(class="title") { "Traços" }
+
+            div(class="trace-container") {
+                div(class="trace") {
+                    span(class="name") { "A" }
+                    span(class="status") { "(10:24)" }
+                    div(class="buttons") {
+                        button() { "󰜺 Excluir" }
+                        button() { " Revelar" }
+                    }
+                }
+                div(class="trace") {
+                    span(class="name") { "A" }
+                    span(class="status") { "(10:24)" }
+                    div(class="buttons") {
+                        button() { "󰜺 Excluir" }
+                        button() { " Revelar" }
+                    }
+                }
+                div(class="trace") {
+                    span(class="name") { "B" }
+                    span(class="status") { "(10:24)" }
+                    div(class="buttons") {
+                        button() { "󰜺 Excluir" }
+                        button() { " Revelar" }
+                    }
+                }
+                div(class="trace") {
+                   span(class="name") { "C" }
+                    span(class="status") { "(10:24)" }
+                    div(class="buttons") {
+                        button() { "󰜺 Excluir" }
+                        button() { " Revelar" }
+                    }
+                }
+                div(class="trace") {
+                   span(class="name") { "D" }
+                    span(class="status") { "(10:24)" }
+                    div(class="buttons") {
+                        button() { "󰜺 Excluir" }
+                        button() { " Revelar" }
+                    }
+                }
+                div(class="trace") {
+                    span(class="name") { "A" }
+                    span(class="status") { "(10:24)" }
+                    div(class="buttons") {
+                        button() { "󰜺 Excluir" }
+                        button() { " Revelar" }
+                    }
+                }
+                div(class="trace") {
+                   span(class="name") { "E" }
+                    span(class="status") { "(Ativo)" }
+                    div(class="buttons") {
+                        button() { " Congelar" }
+                        button() { " Ocultar" }
+                    }
+                }
+            }
+
+            div(class="trace-paging") {
+                button() { " << " }
+                p() { "10/10" }
+                button() { " >> " }
+            }
         }
     }
 }
@@ -107,23 +172,30 @@ fn SideBarMain<G:Html>(cx: Scope) -> View<G> {
 #[component]
 fn LogSpace<G:Html>(cx: Scope) -> View<G> {
     view! { cx,
-        div(class="log-space") {
-            p { "MensagemP" }
-            p { "Mensagem" }
-            p { "Mensagem" }
-            p { "Mensagem" }
-            p { "Mensagem" }
-            p { "Mensagem" }
-            p { "Mensagem" }
-            p { "Mensagem" }
-            p { "Mensagem" }
-            p { "Mensagem" }
-            p { "Mensagem" }
-            p { "Mensagem" }
-            p { "Mensagem" }
-            p { "Mensagem" }
-            p { "Mensagem" }
-            p { "MensagemL" }
+        div(class="side-bar-log") {
+            div(class="title") { "Registro" }
+            div(class="log-space") {
+                p { "[SP] MensagemP" }
+                p { "[T1] Mensagem" }
+                p { "[T2] Mensagem" }
+                p { "[:2] Mensagem" }
+                p { "[SP] MensagemP" }
+                p { "[T1] Mensagem" }
+                p { "[T2] Mensagem" }
+                p { "[:2] Mensagem" }
+                p { "[SP] MensagemP" }
+                p { "[T1] Mensagem" }
+                p { "[T2] Mensagem" }
+                p { "[:2] Mensagem" }
+                p { "[SP] MensagemP" }
+                p { "[T1] Mensagem" }
+                p { "[T2] Mensagem" }
+                p { "[:2] Mensagem" }
+                p { "[SP] MensagemP" }
+                p { "[T1] Mensagem" }
+                p { "[T2] Mensagem" }
+                p { "[:2] 10:56 Lorem ipsum sit dolor amet" }
+            }
         }
     }
 }
