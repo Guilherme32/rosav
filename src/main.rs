@@ -44,10 +44,32 @@ async fn get_last_spectrum_path() -> Option<String> {
     obj_rebuilt
 }
 
+// É i32 para poder fazer subtração, mas sempre será > 0 nos limites do programa
+async fn get_window_size() -> (i32, i32) {
+    let from_back = invoke("get_window_size", to_value(&()).unwrap()).await;
+    let obj_rebuilt: (i32, i32) = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}
+
 #[component]
 fn Graph<G:Html>(cx: Scope) -> View<G> {
     let is_ready = create_signal(cx, false);
     let path = create_signal(cx, String::new());
+    let window_size = create_signal(cx, (0i32, 0i32));
+
+    let svg_size = create_memo(cx, ||
+        ((*window_size.get()).0 - 23 - 200,
+         (*window_size.get()).1 - 27 - 32)
+    );
+
+    let path_sqr = create_memo(cx, || 
+        format!("M 1,1 L {},1 L {},{} L 1,{} L 1,1",
+            (*svg_size.get()).0 - 1,
+            (*svg_size.get()).0 - 1, (*svg_size.get()).1 - 1,
+            (*svg_size.get()).1 - 1
+        )
+    );
 
     spawn_local_scoped(cx, async move {
         loop {
@@ -58,24 +80,31 @@ fn Graph<G:Html>(cx: Scope) -> View<G> {
                 }
             }
             is_ready.set(unread_spectrum().await);
+
+            window_size.set(get_window_size().await);
         }
     });
 
     view! { cx,
         div(class="graph-space back") {
-            div(class="placeholder") {
-                p { "Área do gráfico" }
-                p { "Sem espectro para mostrar" }
-                p { "Grafico pronto: " (is_ready.get()) }
-            }
-            // svg(viewbox = "0 0 480 360",
-            //     height=360,
-            //     width=480)
-            // {
-            //     path(d=path.get(), fill="none", stroke="#000000", stroke-width="3")
-            //     path(d="M 1,1 L 479,1 L 479,359 L 1,359 L 1,1", fill="none",
-            //         stroke-width="2", stroke="#000000")
+            // div(class="placeholder") {
+            //     p { "Área do gráfico" }
+            //     p { "Sem espectro para mostrar" }
+            //     p { "Grafico pronto: " (is_ready.get()) }
+            //     p { "Window size: " }
+            //     p { "x: " (window_size.get().0) }
+            //     p { "y: " (window_size.get().1) }
+            //     p { "svg x: " (svg_size.get().0) }
+            //     p { "svg y: " (svg_size.get().1) }
             // }
+            svg(
+                width=svg_size.get().0,
+                height=svg_size.get().1)
+            {
+                path(d=path.get(), fill="none", stroke="#000000", stroke-width="3")
+                path(d=path_sqr.get(), fill="none",
+                    stroke-width="2", stroke="#000000")
+            }
         }
     }
 }

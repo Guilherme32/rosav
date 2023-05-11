@@ -19,6 +19,16 @@ fn get_last_spectrum_path(reader: tauri::State<file_reader::FileReader<Continuou
     reader.get_last_spectrum_path((480.0, 360.0))
 }
 
+#[tauri::command]
+fn get_window_size(window: tauri::Window) -> (u32, u32) {
+    let size = window.inner_size().unwrap();
+    let scale = window.scale_factor().unwrap();
+
+    (((size.width as f64) / scale).round() as u32, 
+     ((size.height as f64) / scale).round() as u32)
+}
+
+
 fn main() {
     file_reader::test();
 
@@ -40,7 +50,10 @@ fn main() {
 
     tauri::Builder::default()
         .manage(reader)
-        .invoke_handler(tauri::generate_handler![unread_spectrum, get_last_spectrum_path])
-        .run(tauri::generate_context!())
+        .invoke_handler(tauri::generate_handler![
+            unread_spectrum,
+            get_last_spectrum_path,
+            get_window_size
+        ]).run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

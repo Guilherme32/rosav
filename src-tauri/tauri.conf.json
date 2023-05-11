@@ -56,10 +56,12 @@
     "windows": [
       {
         "fullscreen": false,
-        "height": 600,
+        "height": 500,
         "resizable": true,
         "title": "Osa",
-        "width": 800
+        "width": 1000,
+        "minHeight": 400,
+        "minWidth": 700
       }
     ]
   }
