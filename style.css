@@ -19,6 +19,10 @@
   font-family: "Caskaydia Cove";
 }
 
+.back {
+  background-color: #c9cfdd;
+}
+
 .horizontal-container {
   height: calc(100vh - 10px);
   margin: 5px;
@@ -34,17 +38,9 @@
   flex-direction: column;
 }
 
-.lower-bar {
-  margin-top: 5px;
-  min-height: 32px;
-  height: 32px;
-  background-color: lightgreen;
-}
-
 .side-bar {
   min-width: 200px;
   width: 200px;
-  // background-color: lightblue;
 
   display: flex;
   flex-direction: column;
@@ -56,14 +52,13 @@
   border: 2px solid black;
   display: flex;
   flex-direction: column;
-  // background-color: orchid;
-  // overflow: hidden;
 }
 
 .title {
   background-color: black;
   color: white;
   text-align: center;
+  padding: 1px;
 }
 
 .trace-container {
@@ -90,9 +85,10 @@
 }
 
 .trace .name {
-  margin: 0px 2px;
+  padding: 0px 4px;
   font-size: 2rem;
-  color: darkgreen;
+  background-color: darkgreen;
+  color: white;
 }
 
 .trace .status {
@@ -107,7 +103,9 @@
 
 .trace .buttons {
   display: flex;
-  flex-direction: column;
+  flex-direction: line;
+  flex-wrap: wrap;
+  width: 50px;
 }
 
 button {
@@ -126,8 +124,8 @@ button:active {
 }
 
 .trace .buttons button {
-  width: 90px;
-  text-align: left;
+  width: 25px;
+  padding-right: 0.5rem;
 }
 
 .side-bar-log {
@@ -141,7 +139,6 @@ button:active {
 .log-space {
   flex: 1;
   padding: 2px;
-  margin-top: 5px;
   font-size: 0.7rem;
 
   display: flex;
@@ -152,8 +149,69 @@ button:active {
 }
 
 .graph-space {
-  width: calc(100vw - 15px - 200px);
-  min-height: calc(100vh - 15px - 32px);
-  height: calc(100vh - 15px - 32px);
-  background-color: lightgray;
+  width: calc(100vw - 23px - 200px);        /* total - margins and paddings - other elements */
+  min-height: calc(100vh - 27px - 32px);
+  height: calc(100vh - 27px - 32px);
+
+  border: 2px solid black;
+  padding: 2px;
+}
+
+.graph-space .placeholder {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+}
+
+.lower-bar {
+  display: flex;
+  flex-direction: line;
+  justify-content: space-between;
+  border: 2px solid black;
+
+  margin: 5px 0px;
+  min-height: 32px;
+  height: 32px;
+}
+
+.lower-bar button {
+  border: unset;
+  border-right: 2px solid black;
+  
+  height: 32px;
+  font-size: 1.5rem;
+  width: 3rem;
+  padding-right: 0.75rem;
+
+  text-align: center;
+}
+
+.lower-bar > div:nth-child(2) > button:first-child {
+  border-left: 2px solid black;
+}
+
+.no-offset {
+  padding: 1px 3px !important;
+}
+
+.lower-bar .status {
+  display: flex;
+  flex-direction: column;
+
+  border-left: 2px solid black;
+}
+
+.lower-bar .status p {
+  flex: 1;
+  font-size: 0.75rem;
+  width: 6rem;
+  text-align: center;
+
+  background-color: white;
+}
+
+.lower-bar .status p:first-child {
+  border-bottom: 2px solid black;
 }

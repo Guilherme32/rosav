@@ -62,16 +62,20 @@ fn Graph<G:Html>(cx: Scope) -> View<G> {
     });
 
     view! { cx,
-        div(class="graph-space") {
-            p { "Grafico pronto: " (is_ready.get()) }
-            svg(viewbox = "0 0 480 360",
-                height=360,
-                width=480)
-            {
-                path(d=path.get(), fill="none", stroke="#000000", stroke-width="3")
-                path(d="M 1,1 L 479,1 L 479,359 L 1,359 L 1,1", fill="none",
-                    stroke-width="2", stroke="#000000")
+        div(class="graph-space back") {
+            div(class="placeholder") {
+                p { "Área do gráfico" }
+                p { "Sem espectro para mostrar" }
+                p { "Grafico pronto: " (is_ready.get()) }
             }
+            // svg(viewbox = "0 0 480 360",
+            //     height=360,
+            //     width=480)
+            // {
+            //     path(d=path.get(), fill="none", stroke="#000000", stroke-width="3")
+            //     path(d="M 1,1 L 479,1 L 479,359 L 1,359 L 1,1", fill="none",
+            //         stroke-width="2", stroke="#000000")
+            // }
         }
     }
 }
@@ -79,8 +83,21 @@ fn Graph<G:Html>(cx: Scope) -> View<G> {
 #[component]
 fn LowerBar<G:Html>(cx: Scope) -> View<G> {
     view! { cx, 
-        div(class="lower-bar") {
-            "icon 1"
+        div(class="lower-bar back") {
+            div() {
+                button() { "󰢻 "}
+                button() { "󰽉 "}
+            }
+            div() {
+                button(class="no-offset") { " " }
+                button(style="padding-right: 0.6rem;") { "󱑹 " }
+                button(class="no-offset") { "󱐥 " }
+                button() { "󱐤 " }
+            }
+            div(class="status") {
+                p() { "Lendo Const." }
+                p() { "Não Salvando" }
+            }
         }
     }
 }
@@ -101,61 +118,75 @@ fn SideBarMain<G:Html>(cx: Scope) -> View<G> {
         div(class="side-bar-main") {
             p(class="title") { "Traços" }
 
-            div(class="trace-container") {
+            div(class="trace-container back") {
                 div(class="trace") {
                     span(class="name") { "A" }
                     span(class="status") { "(10:24)" }
                     div(class="buttons") {
-                        button() { "󰜺 Excluir" }
-                        button() { " Revelar" }
+                        button() { "󰜺 " }
+                        button() { " " }
+                        button() { " " }
+                        button() { "⚡" }
                     }
                 }
                 div(class="trace") {
                     span(class="name") { "A" }
                     span(class="status") { "(10:24)" }
                     div(class="buttons") {
-                        button() { "󰜺 Excluir" }
-                        button() { " Revelar" }
+                        button() { "󰜺 " }
+                        button() { " " }
+                        button() { " " }
+                        button() { "⚡" }
                     }
                 }
                 div(class="trace") {
                     span(class="name") { "B" }
                     span(class="status") { "(10:24)" }
                     div(class="buttons") {
-                        button() { "󰜺 Excluir" }
-                        button() { " Revelar" }
+                        button() { "󰜺 " }
+                        button() { " " }
+                        button() { " " }
+                        button() { "⚡" }
                     }
                 }
                 div(class="trace") {
                    span(class="name") { "C" }
                     span(class="status") { "(10:24)" }
                     div(class="buttons") {
-                        button() { "󰜺 Excluir" }
-                        button() { " Revelar" }
+                        button() { "󰜺 " }
+                        button() { " " }
+                        button() { " " }
+                        button() { "⚡" }
                     }
                 }
                 div(class="trace") {
                    span(class="name") { "D" }
                     span(class="status") { "(10:24)" }
                     div(class="buttons") {
-                        button() { "󰜺 Excluir" }
-                        button() { " Revelar" }
+                        button() { "󰜺 " }
+                        button() { " " }
+                        button() { " " }
+                        button() { "⚡" }
                     }
                 }
                 div(class="trace") {
                     span(class="name") { "A" }
                     span(class="status") { "(10:24)" }
                     div(class="buttons") {
-                        button() { "󰜺 Excluir" }
-                        button() { " Revelar" }
+                        button() { "󰜺 " }
+                        button() { " " }
+                        button() { " " }
+                        button() { "⚡" }
                     }
                 }
                 div(class="trace") {
                    span(class="name") { "E" }
                     span(class="status") { "(Ativo)" }
                     div(class="buttons") {
-                        button() { " Congelar" }
-                        button() { " Ocultar" }
+                        button() { "󰜺 " }
+                        button() { " " }
+                        button() { " " }
+                        button() { "⚡" }
                     }
                 }
             }
@@ -174,7 +205,7 @@ fn LogSpace<G:Html>(cx: Scope) -> View<G> {
     view! { cx,
         div(class="side-bar-log") {
             div(class="title") { "Registro" }
-            div(class="log-space") {
+            div(class="log-space back") {
                 p { "[SP] MensagemP" }
                 p { "[T1] Mensagem" }
                 p { "[T2] Mensagem" }
