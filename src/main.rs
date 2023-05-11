@@ -52,16 +52,18 @@ async fn get_window_size() -> (i32, i32) {
     obj_rebuilt
 }
 
+async fn get_svg_size() -> (i32, i32) {
+    let from_back = invoke("get_svg_size", to_value(&()).unwrap()).await;
+    let obj_rebuilt: (i32, i32) = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}
+
 #[component]
 fn Graph<G:Html>(cx: Scope) -> View<G> {
     let is_ready = create_signal(cx, false);
     let path = create_signal(cx, String::new());
-    let window_size = create_signal(cx, (0i32, 0i32));
-
-    let svg_size = create_memo(cx, ||
-        ((*window_size.get()).0 - 23 - 200,
-         (*window_size.get()).1 - 27 - 32)
-    );
+    let svg_size = create_signal(cx, (0i32, 0i32));
 
     let path_sqr = create_memo(cx, || 
         format!("M 1,1 L {},1 L {},{} L 1,{} L 1,1",
@@ -81,7 +83,7 @@ fn Graph<G:Html>(cx: Scope) -> View<G> {
             }
             is_ready.set(unread_spectrum().await);
 
-            window_size.set(get_window_size().await);
+            svg_size.set(get_svg_size().await);
         }
     });
 

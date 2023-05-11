@@ -28,6 +28,18 @@ fn get_window_size(window: tauri::Window) -> (u32, u32) {
      ((size.height as f64) / scale).round() as u32)
 }
 
+#[tauri::command]
+fn get_svg_size(window: tauri::Window) -> (u32, u32) {
+    let win_size = window.inner_size().unwrap();
+    let scale = window.scale_factor().unwrap();
+    let win_size_scaled = (((win_size.width as f64) / scale).round() as u32, 
+                           ((win_size.height as f64) / scale).round() as u32);
+
+     
+    (win_size_scaled.0 - 23 - 200,
+     win_size_scaled.1 - 27 - 32)
+}
+
 
 fn main() {
     file_reader::test();
@@ -53,7 +65,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             unread_spectrum,
             get_last_spectrum_path,
-            get_window_size
+            get_window_size,
+            get_svg_size
         ]).run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
