@@ -3,11 +3,12 @@ use sycamore::prelude::*;
 // use std::iter;
 
 use wasm_bindgen::prelude::*;
-// use serde::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize};
 use sycamore::futures::spawn_local_scoped;
 use serde_wasm_bindgen::{to_value, from_value};
 
 use gloo_timers::future::TimeoutFuture;
+use std::fmt;
 
 
 fn main() {
@@ -61,9 +62,32 @@ async fn get_svg_size() -> (i32, i32) {
     obj_rebuilt
 }
 
-async fn get_last_logs() -> Vec::<String> {
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+struct Log {
+    id: u32,
+    msg: String,
+    log_type: LogType
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+enum LogType {
+    Info,
+    Warning,
+    Error
+}
+impl fmt::Display for LogType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match self {
+            LogType::Info => write!(f, "info"),
+            LogType::Warning => write!(f, "warning"),
+            LogType::Error => write!(f, "error")
+        }
+    }
+}
+
+async fn get_last_logs() -> Vec::<Log> {
     let from_back = invoke("get_last_logs", to_value(&()).unwrap()).await;
-    let obj_rebuilt: Vec::<String> = from_value(from_back).unwrap();
+    let obj_rebuilt: Vec::<Log> = from_value(from_back).unwrap();
 
     obj_rebuilt
 }
@@ -242,31 +266,18 @@ fn SideBarMain<G:Html>(cx: Scope) -> View<G> {
     }
 }
 
-#[derive(Clone, PartialEq)]
-struct Log {
-    id: u32,
-    msg: String
-}
-
 #[component]
 fn LogSpace<G:Html>(cx: Scope) -> View<G> {
     let logs = create_signal(cx, Vec::<Log>::with_capacity(30));
-    logs.modify().push(Log { id: 0, msg: "Teste0".to_string() });
-    logs.modify().push(Log { id: 1, msg: "Teste1".to_string() });
-    logs.modify().push(Log { id: 2, msg: "Teste2".to_string() });
-    logs.modify().push(Log { id: 3, msg: "Teste3".to_string() });
-    logs.modify().push(Log { id: 4, msg: "Teste4".to_string() });
-
-    logs.modify().remove(0);
-    logs.modify().remove(0);
 
     spawn_local_scoped(cx, async move {
         let mut count = 0u32;
         loop {
-            TimeoutFuture::new(2000).await;
+            TimeoutFuture::new(200).await;
             let new_logs = get_last_logs().await;
-            for new_log in new_logs {
-                logs.modify().push(Log { id: count, msg: new_log });
+            for mut new_log in new_logs {
+                new_log.id = count;
+                logs.modify().push(new_log);
                 count += 1;
             }
         }
@@ -279,30 +290,10 @@ fn LogSpace<G:Html>(cx: Scope) -> View<G> {
                 Keyed(
                     iterable = logs,
                     view = |cx, x| view! { cx,
-                        p { (x.msg) }
+                        p(class=x.log_type) { (x.msg) }
                     },
                     key = |x| (*x).id,
                 )
-                // p { "[SP] MensagemP" }
-                // p { "[T1] Mensagem" }
-                // p { "[T2] Mensagem" }
-                // p { "[:2] Mensagem" }
-                // p { "[SP] MensagemP" }
-                // p { "[T1] Mensagem" }
-                // p { "[T2] Mensagem" }
-                // p { "[:2] Mensagem" }
-                // p { "[SP] MensagemP" }
-                // p { "[T1] Mensagem" }
-                // p { "[T2] Mensagem" }
-                // p { "[:2] Mensagem" }
-                // p { "[SP] MensagemP" }
-                // p { "[T1] Mensagem" }
-                // p { "[T2] Mensagem" }
-                // p { "[:2] Mensagem" }
-                // p { "[SP] MensagemP" }
-                // p { "[T1] Mensagem" }
-                // p { "[T2] Mensagem" }
-                // p { "[:2] 10:56 Lorem ipsum sit dolor amet" }
             }
         }
     }

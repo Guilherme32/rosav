@@ -138,7 +138,6 @@ button:active {
 
 .log-space {
   flex: 1;
-  padding: 2px;
   font-size: 0.7rem;
 
   display: flex;
@@ -147,6 +146,22 @@ button:active {
   
   overflow: hidden;
 }
+
+.log-space p {
+  padding: 0px 2px;
+}
+
+.info {
+}
+
+.warning {
+  background-color: khaki;
+}
+
+.error {
+  background-color: lightcoral;
+}
+
 
 .graph-space {
   width: calc(100vw - 23px - 200px);        /* total - margins and paddings - other elements */
@@ -215,3 +230,5 @@ button:active {
 .lower-bar .status p:first-child {
   border-bottom: 2px solid black;
 }
+
+

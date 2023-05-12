@@ -6,12 +6,26 @@
 use app::file_reader::{ self, Continuous };
 // use std::thread::sleep;
 // use std::time::Duration;
+use serde::{Serialize, Deserialize};
 use std::sync::{ atomic, Mutex };
 
+#[derive(Serialize, Deserialize, Debug)]
+struct Log {
+    id: u32,
+    msg: String,
+    log_type: LogType
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+enum LogType {
+    Info,
+    Warning,
+    Error
+}
 
 #[tauri::command]
 fn unread_spectrum(reader: tauri::State<file_reader::FileReader<Continuous>>) -> bool {
-    return reader.unread_spectrum.load(atomic::Ordering::Relaxed);
+    reader.unread_spectrum.load(atomic::Ordering::Relaxed)
 }
 
 #[tauri::command]
@@ -21,29 +35,33 @@ fn get_last_spectrum_path(reader: tauri::State<file_reader::FileReader<Continuou
 
 #[tauri::command]
 fn get_window_size(window: tauri::Window) -> (u32, u32) {
-    let size = window.inner_size().unwrap();
-    let scale = window.scale_factor().unwrap();
+    let win_size = window.inner_size().expect("Could not get window size");
+    let scale = window.scale_factor().expect("Could not get window scale");
 
-    (((size.width as f64) / scale).round() as u32, 
-     ((size.height as f64) / scale).round() as u32)
+    (((win_size.width as f64) / scale).round() as u32, 
+     ((win_size.height as f64) / scale).round() as u32)
 }
 
 #[tauri::command]
 fn get_svg_size(window: tauri::Window) -> (u32, u32) {
-    let win_size = window.inner_size().unwrap();
-    let scale = window.scale_factor().unwrap();
+    let win_size = window.inner_size().expect("Could not get window size");
+    let scale = window.scale_factor().expect("Could not get window scale");
     let win_size_scaled = (((win_size.width as f64) / scale).round() as u32, 
                            ((win_size.height as f64) / scale).round() as u32);
 
-     
+ 
+    if win_size.width == 0 {            // if minimized
+        return (0, 0);
+    }
+
     (win_size_scaled.0 - 23 - 200,
      win_size_scaled.1 - 27 - 32)
 }
 
 #[tauri::command]
-fn get_last_logs(logs: tauri::State<Mutex<Vec::<String>>>) -> Vec::<String> {
+fn get_last_logs(logs: tauri::State<Mutex<Vec::<Log>>>) -> Vec::<Log> {
     let mut logs_lock = logs.lock().unwrap();
-    let mut new_vec = Vec::<String>::with_capacity((*logs_lock).len());
+    let mut new_vec = Vec::<Log>::with_capacity((*logs_lock).len());
     while !(*logs_lock).is_empty() {
         new_vec.push((*logs_lock).remove(0));
     }
@@ -58,10 +76,14 @@ fn main() {
     let reader = reader.connect().unwrap();
     let reader = reader.read_continuous().unwrap();
 
-    let log = Mutex::new(Vec::<String>::new());
+    let log = Mutex::new(Vec::<Log>::new());
     {
         let mut lock = log.lock().unwrap();
-        (*lock).push("[LOG] Teste direto do backend123 2".to_string());
+        (*lock).push(Log {
+            id: 0,
+            msg: "[STR] Started the program".to_string(),
+            log_type: LogType::Info
+        });
     };
         
     // loop {
