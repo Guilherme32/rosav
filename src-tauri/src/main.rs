@@ -4,9 +4,9 @@
 )]
 
 use app::file_reader::{ self, Continuous };
-use std::thread::sleep;
-use std::time::Duration;
-use std::sync::atomic;
+// use std::thread::sleep;
+// use std::time::Duration;
+use std::sync::{ atomic, Mutex };
 
 
 #[tauri::command]
@@ -40,6 +40,16 @@ fn get_svg_size(window: tauri::Window) -> (u32, u32) {
      win_size_scaled.1 - 27 - 32)
 }
 
+#[tauri::command]
+fn get_last_logs(logs: tauri::State<Mutex<Vec::<String>>>) -> Vec::<String> {
+    let mut logs_lock = logs.lock().unwrap();
+    let mut new_vec = Vec::<String>::with_capacity((*logs_lock).len());
+    while !(*logs_lock).is_empty() {
+        new_vec.push((*logs_lock).remove(0));
+    }
+
+    new_vec
+}
 
 fn main() {
     file_reader::test();
@@ -48,6 +58,12 @@ fn main() {
     let reader = reader.connect().unwrap();
     let reader = reader.read_continuous().unwrap();
 
+    let log = Mutex::new(Vec::<String>::new());
+    {
+        let mut lock = log.lock().unwrap();
+        (*lock).push("[LOG] Teste direto do backend123 2".to_string());
+    };
+        
     // loop {
     //     sleep(Duration::from_secs(1));
     //     let unread = reader.unread_spectrum.load(atomic::Ordering::Relaxed);
@@ -62,11 +78,13 @@ fn main() {
 
     tauri::Builder::default()
         .manage(reader)
+        .manage(log)
         .invoke_handler(tauri::generate_handler![
             unread_spectrum,
             get_last_spectrum_path,
             get_window_size,
-            get_svg_size
+            get_svg_size,
+            get_last_logs
         ]).run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

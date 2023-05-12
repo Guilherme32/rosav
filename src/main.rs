@@ -23,6 +23,8 @@ fn main() {
 }
 
 
+// API -------------------------------
+
 #[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "tauri"])]
@@ -58,6 +60,15 @@ async fn get_svg_size() -> (i32, i32) {
 
     obj_rebuilt
 }
+
+async fn get_last_logs() -> Vec::<String> {
+    let from_back = invoke("get_last_logs", to_value(&()).unwrap()).await;
+    let obj_rebuilt: Vec::<String> = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}
+
+// COMPONENTS ----------------------------
 
 #[component]
 fn Graph<G:Html>(cx: Scope) -> View<G> {
@@ -231,32 +242,67 @@ fn SideBarMain<G:Html>(cx: Scope) -> View<G> {
     }
 }
 
+#[derive(Clone, PartialEq)]
+struct Log {
+    id: u32,
+    msg: String
+}
+
 #[component]
 fn LogSpace<G:Html>(cx: Scope) -> View<G> {
+    let logs = create_signal(cx, Vec::<Log>::with_capacity(30));
+    logs.modify().push(Log { id: 0, msg: "Teste0".to_string() });
+    logs.modify().push(Log { id: 1, msg: "Teste1".to_string() });
+    logs.modify().push(Log { id: 2, msg: "Teste2".to_string() });
+    logs.modify().push(Log { id: 3, msg: "Teste3".to_string() });
+    logs.modify().push(Log { id: 4, msg: "Teste4".to_string() });
+
+    logs.modify().remove(0);
+    logs.modify().remove(0);
+
+    spawn_local_scoped(cx, async move {
+        let mut count = 0u32;
+        loop {
+            TimeoutFuture::new(2000).await;
+            let new_logs = get_last_logs().await;
+            for new_log in new_logs {
+                logs.modify().push(Log { id: count, msg: new_log });
+                count += 1;
+            }
+        }
+    });
+
     view! { cx,
         div(class="side-bar-log") {
             div(class="title") { "Registro" }
             div(class="log-space back") {
-                p { "[SP] MensagemP" }
-                p { "[T1] Mensagem" }
-                p { "[T2] Mensagem" }
-                p { "[:2] Mensagem" }
-                p { "[SP] MensagemP" }
-                p { "[T1] Mensagem" }
-                p { "[T2] Mensagem" }
-                p { "[:2] Mensagem" }
-                p { "[SP] MensagemP" }
-                p { "[T1] Mensagem" }
-                p { "[T2] Mensagem" }
-                p { "[:2] Mensagem" }
-                p { "[SP] MensagemP" }
-                p { "[T1] Mensagem" }
-                p { "[T2] Mensagem" }
-                p { "[:2] Mensagem" }
-                p { "[SP] MensagemP" }
-                p { "[T1] Mensagem" }
-                p { "[T2] Mensagem" }
-                p { "[:2] 10:56 Lorem ipsum sit dolor amet" }
+                Keyed(
+                    iterable = logs,
+                    view = |cx, x| view! { cx,
+                        p { (x.msg) }
+                    },
+                    key = |x| (*x).id,
+                )
+                // p { "[SP] MensagemP" }
+                // p { "[T1] Mensagem" }
+                // p { "[T2] Mensagem" }
+                // p { "[:2] Mensagem" }
+                // p { "[SP] MensagemP" }
+                // p { "[T1] Mensagem" }
+                // p { "[T2] Mensagem" }
+                // p { "[:2] Mensagem" }
+                // p { "[SP] MensagemP" }
+                // p { "[T1] Mensagem" }
+                // p { "[T2] Mensagem" }
+                // p { "[:2] Mensagem" }
+                // p { "[SP] MensagemP" }
+                // p { "[T1] Mensagem" }
+                // p { "[T2] Mensagem" }
+                // p { "[:2] Mensagem" }
+                // p { "[SP] MensagemP" }
+                // p { "[T1] Mensagem" }
+                // p { "[T2] Mensagem" }
+                // p { "[:2] 10:56 Lorem ipsum sit dolor amet" }
             }
         }
     }
