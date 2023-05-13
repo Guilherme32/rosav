@@ -20,62 +20,131 @@ pub fn test() {
     return ();
 }
 
+// #[derive(Debug)]
+// pub struct Connected;
+// #[derive(Debug)]
+// pub struct Disconnected;
+// #[derive(Debug)]
+// pub struct Continuous {
+//     watcher: notify::RecommendedWatcher
+// }
+
 #[derive(Debug)]
-pub struct Connected;
-#[derive(Debug)]
-pub struct Disconnected;
-#[derive(Debug)]
-pub struct Continuous {
-    watcher: notify::RecommendedWatcher
+enum ReaderState {
+    Disconnected,
+    Connected,
+    Reading (notify::RecommendedWatcher)
 }
 
 #[derive(Debug)]
-pub struct FileReader<T> {
+pub struct FileReader {
     pub path: String,
     pub last_spectrum: Arc<Mutex<Option<Spectrum>>>,
     pub frozen_spectra: Vec<Spectrum>,
     pub unread_spectrum: Arc<AtomicBool>,
-    connection: T
+    state: ReaderState
 }
 
 #[derive(Debug)]
 pub enum ConnectError {
+    ReaderAlreadyConnected,
     PathDoesNotExist,
     PathIsNotDir,
     PathWithoutPermission
 }
 
 #[derive(Debug)]
-pub enum NotifyError {
+pub enum ContinuousError {
+    ReaderNotConnected,
+    ReaderAlreadyContinuous,
     NotifyInternalError
 }
 
-impl FileReader<Disconnected> {
-    pub fn connect(self) 
-        -> Result<FileReader<Connected>, (ConnectError, FileReader<Disconnected>)>
+impl FileReader {
+    pub fn connect<'a>(&'a mut self) -> Result<&'a mut Self, ConnectError>
     {
+        match self.state {
+            ReaderState::Disconnected => (),
+            _ => return Err(ConnectError::ReaderAlreadyConnected)
+        }
+
         let path = Path::new(&self.path);
 
         match path.try_exists() {
-            Err(_) => { return Err((ConnectError::PathWithoutPermission, self)) },
+            Err(_) => { return Err(ConnectError::PathWithoutPermission) },
             Ok(exists) => {
                 if !exists {
-                    return Err((ConnectError::PathDoesNotExist, self))
+                    return Err(ConnectError::PathDoesNotExist)
                 }
             }
         }
 
         if !path.is_dir() {
-            return Err((ConnectError::PathIsNotDir, self));
+            return Err(ConnectError::PathIsNotDir);
         }
 
-        Ok(FileReader {
-            path: self.path,
-            last_spectrum: self.last_spectrum,
-            frozen_spectra: self.frozen_spectra,
-            unread_spectrum: self.unread_spectrum,
-            connection: Connected
-        })
+        self.state = ReaderState::Connected;
+        Ok(self)
+    }
+
+    pub fn read_continuous<'a>(&'a mut self) -> Result<&'a mut Self, ContinuousError>
+    {
+        match self.state {
+            ReaderState::Disconnected => return Err(ContinuousError::ReaderNotConnected),
+            ReaderState::Reading(_) => return Err(ContinuousError::ReaderAlreadyContinuous),
+            _ => ()
+        }
+
+        let path = Path::new(&self.path);
+
+        let spectrum_reference = Arc::clone(&self.last_spectrum);
+        let flag_reference = Arc::clone(&self.unread_spectrum);
+        let callback = move |event| watcher_callback(
+            event,
+            Arc::clone(&spectrum_reference),
+            Arc::clone(&flag_reference)
+        );
+
+        let mut watcher = match notify::recommended_watcher(callback) {
+            Ok(_watcher) => _watcher,
+            Err(_) => return Err(ContinuousError::NotifyInternalError)
+        };
+
+        match watcher.watch(path, RecursiveMode::NonRecursive) {
+            Ok(_) => (),
+            Err(_) => return Err(ContinuousError::NotifyInternalError)
+        }
+
+        self.state = ReaderState::Reading(watcher);
+        Ok(self)
+    }
+
+
+    pub fn get_last_spectrum_path(&self, svg_limits: (f64, f64)) -> Option<String> {
+        let spectrum = match self.last_spectrum.lock() {
+            Ok(spectrum) => spectrum,
+            Err(error) => { 
+                println!("[FR] Could not acquire the lock to get last spectrum ({})", error);
+                return None;
+            }
+        };
+
+        self.unread_spectrum.store(false, atomic::Ordering::Relaxed);
+        match &*spectrum {
+            Some(spectrum) => Some(spectrum.to_path(svg_limits)),
+            None => None
+        }
+    }
+
+}
+
+pub fn new_file_reader(path: String) -> FileReader {
+    FileReader {
+        path,
+        last_spectrum: Arc::new(Mutex::new(None)),
+        frozen_spectra: vec![],
+        unread_spectrum: Arc::new(AtomicBool::new(false)),
+        state: ReaderState::Disconnected
     }
 }
 
@@ -136,64 +205,3 @@ fn watcher_callback<T: std::fmt::Debug>(
     };
 }
 
-impl FileReader<Connected> {
-    pub fn read_continuous(self)
-        -> Result<FileReader<Continuous>, (NotifyError, FileReader<Connected>)>
-    {
-        let path = Path::new(&self.path);
-
-        let spectrum_reference = Arc::clone(&self.last_spectrum);
-        let flag_reference = Arc::clone(&self.unread_spectrum);
-        let callback = move |event| watcher_callback(
-            event,
-            Arc::clone(&spectrum_reference),
-            Arc::clone(&flag_reference)
-        );
-
-        let mut watcher = match notify::recommended_watcher(callback) {
-            Ok(_watcher) => _watcher,
-            Err(_) => return Err((NotifyError::NotifyInternalError, self))
-        };
-
-        match watcher.watch(path, RecursiveMode::NonRecursive) {
-            Ok(_) => (),
-            Err(_) => return Err((NotifyError::NotifyInternalError, self))
-        }
-
-        Ok(FileReader {
-            path: self.path,
-            last_spectrum: self.last_spectrum,
-            frozen_spectra: self.frozen_spectra,
-            unread_spectrum: self.unread_spectrum,
-            connection: Continuous { watcher }
-        })
-    }
-}
-
-pub fn new_file_reader(path: String) -> FileReader<Disconnected> {
-    FileReader {
-        path,
-        last_spectrum: Arc::new(Mutex::new(None)),
-        frozen_spectra: vec![],
-        unread_spectrum: Arc::new(AtomicBool::new(false)),
-        connection: Disconnected
-    }
-}
-
-impl FileReader<Continuous> {
-    pub fn get_last_spectrum_path(&self, svg_limits: (f64, f64)) -> Option<String> {
-        let spectrum = match self.last_spectrum.lock() {
-            Ok(spectrum) => spectrum,
-            Err(error) => { 
-                println!("[FR] Could not acquire the lock to get last spectrum ({})", error);
-                return None;
-            }
-        };
-
-        self.unread_spectrum.store(false, atomic::Ordering::Relaxed);
-        match &*spectrum {
-            Some(spectrum) => Some(spectrum.to_path(svg_limits)),
-            None => None
-        }
-    }
-}

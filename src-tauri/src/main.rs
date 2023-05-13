@@ -3,7 +3,7 @@
     windows_subsystem = "windows"
 )]
 
-use app::file_reader::{ self, Continuous };
+use app::file_reader;
 // use std::thread::sleep;
 // use std::time::Duration;
 use serde::{Serialize, Deserialize};
@@ -24,12 +24,12 @@ enum LogType {
 }
 
 #[tauri::command]
-fn unread_spectrum(reader: tauri::State<file_reader::FileReader<Continuous>>) -> bool {
+fn unread_spectrum(reader: tauri::State<file_reader::FileReader>) -> bool {
     reader.unread_spectrum.load(atomic::Ordering::Relaxed)
 }
 
 #[tauri::command]
-fn get_last_spectrum_path(reader: tauri::State<file_reader::FileReader<Continuous>>) -> Option<String> {
+fn get_last_spectrum_path(reader: tauri::State<file_reader::FileReader>) -> Option<String> {
     reader.get_last_spectrum_path((480.0, 360.0))
 }
 
@@ -69,12 +69,17 @@ fn get_last_logs(logs: tauri::State<Mutex<Vec::<Log>>>) -> Vec::<Log> {
     new_vec
 }
 
+#[tauri::command]
+fn get_wavelength_limits(reader: tauri::State<file_reader::FileReader>) -> (f64, f64) {
+    (1500.311234, 1599.599999)
+}
+
 fn main() {
     file_reader::test();
 
-    let reader = file_reader::new_file_reader("D:\\test".to_string());
-    let reader = reader.connect().unwrap();
-    let reader = reader.read_continuous().unwrap();
+    let mut reader = file_reader::new_file_reader("D:\\test".to_string());
+    reader.connect().unwrap();
+    reader.read_continuous().unwrap();
 
     let log = Mutex::new(Vec::<Log>::new());
     {
@@ -106,7 +111,8 @@ fn main() {
             get_last_spectrum_path,
             get_window_size,
             get_svg_size,
-            get_last_logs
+            get_last_logs,
+            get_wavelength_limits
         ]).run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

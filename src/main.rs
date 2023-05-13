@@ -92,6 +92,13 @@ async fn get_last_logs() -> Vec::<Log> {
     obj_rebuilt
 }
 
+async fn get_wavelength_limits() -> (f64, f64) {
+    let from_back = invoke("get_wavelength_limits", to_value(&()).unwrap()).await;
+    let obj_rebuilt: (f64, f64) = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}
+
 // COMPONENTS ----------------------------
 
 #[component]
@@ -99,14 +106,6 @@ fn Graph<G:Html>(cx: Scope) -> View<G> {
     let is_ready = create_signal(cx, false);
     let path = create_signal(cx, String::new());
     let svg_size = create_signal(cx, (0i32, 0i32));
-
-    let path_sqr = create_memo(cx, || 
-        format!("M 1,1 L {},1 L {},{} L 1,{} L 1,1",
-            (*svg_size.get()).0 - 1,
-            (*svg_size.get()).0 - 1, (*svg_size.get()).1 - 1,
-            (*svg_size.get()).1 - 1
-        )
-    );
 
     spawn_local_scoped(cx, async move {
         loop {
@@ -124,26 +123,139 @@ fn Graph<G:Html>(cx: Scope) -> View<G> {
 
     view! { cx,
         div(class="graph-space back") {
-            // div(class="placeholder") {
-            //     p { "Área do gráfico" }
-            //     p { "Sem espectro para mostrar" }
-            //     p { "Grafico pronto: " (is_ready.get()) }
-            //     p { "Window size: " }
-            //     p { "x: " (window_size.get().0) }
-            //     p { "y: " (window_size.get().1) }
-            //     p { "svg x: " (svg_size.get().0) }
-            //     p { "svg y: " (svg_size.get().1) }
-            // }
-            svg(
-                width=svg_size.get().0,
-                height=svg_size.get().1)
-            {
-                path(d=path.get(), fill="none", stroke="#000000", stroke-width="3")
-                path(d=path_sqr.get(), fill="none",
-                    stroke-width="2", stroke="#000000")
-            }
+            (if false {//(*path.get()).len() == 0 {
+                view! { cx,
+                    div(class="placeholder") {
+                        p { "Área do gráfico" }
+                        p { "Sem espectro para mostrar" }
+                    }
+                }
+            } else {
+                    view! { cx,
+                        svg(
+                            width=svg_size.get().0,
+                            height=svg_size.get().1)
+                        {
+                            path(d=path.get(), fill="none", stroke="#000000", stroke-width="3") {}
+                            GraphFrame(svg_size=svg_size)
+                        }
+                    }
+                }
+            )
         }
     }
+}
+
+#[derive(Prop)]
+struct FrameProps<'a> {
+    svg_size: &'a ReadSignal<(i32, i32)>
+}
+
+#[component]
+fn GraphFrame<'a, G:Html>(cx: Scope<'a>, props: FrameProps<'a>) -> View<G> {
+
+    let graph_size = create_memo(cx, || 
+        ((*props.svg_size.get()).0 - 32,        // 32 e 16 para os labels dos eixos
+        (*props.svg_size.get()).1 - 16)
+        
+    );
+
+    let path_sqr = create_memo(cx, || 
+        format!("M 1,1 L {},1 L {},{} L 1,{} L 1,1",
+            (*graph_size.get()).0 - 1,        // - 1 pra margem por conta ta largura do traço
+            (*graph_size.get()).0 - 1, (*graph_size.get()).1 - 1,
+            (*graph_size.get()).1 - 1
+        )
+    );
+
+    let n_divs = create_memo(cx, || 
+       ((*graph_size.get()).0 / 100 + 1,
+        (*graph_size.get()).1 / 100 + 1) 
+    );
+
+    let divs_x = create_memo(cx, ||
+        (1..(*n_divs.get()).0)
+            .map(|x| (x * (*graph_size.get()).0) / (*n_divs.get()).0)
+            .collect::<Vec<i32>>()
+    );
+
+    let divs_x_path = create_memo(cx, || 
+        (*divs_x.get()).iter()
+            .map(|x| format!("M {},1 L {},{}", x, x, (*graph_size.get()).1 - 1))
+            .collect::<Vec<String>>()
+    );
+
+    let divs_y = create_memo(cx, ||
+        (1..(*n_divs.get()).1)
+            .map(|y| (y * (*graph_size.get()).1) / (*n_divs.get()).1)
+            .collect::<Vec<i32>>()
+    );
+
+    let divs_y_path = create_memo(cx, || 
+        (*divs_y.get()).iter()
+            .map(|y| format!("M 1,{} L {},{}", y, (*graph_size.get()).0 - 1, y))
+            .collect::<Vec<String>>()
+    );
+
+    let wl_limits = create_signal(cx, (1500f64, 1600f64));
+    spawn_local_scoped(cx, async move {
+        loop {
+            TimeoutFuture::new(200).await;
+            let new_wl_limits = get_wavelength_limits().await;
+            if new_wl_limits != *wl_limits.get() {
+                wl_limits.set(new_wl_limits);
+            }
+        }
+    });
+
+    let wl_limits_txt = create_memo(cx, ||
+        (*divs_x.get()).iter()
+            .skip(1)
+            .map(|x|
+                (x,
+                (*wl_limits.get()).0
+                + ((*wl_limits.get()).1 - (*wl_limits.get()).0)
+                * (*x as f64) / (*graph_size.get()).0 as f64)
+            ).map(|(pos, x)| (*pos, format!("{:.2}", x)))
+            .collect::<Vec<(i32, String)>>()
+    );
+
+    view! { cx,
+        Indexed(
+            iterable=divs_x_path,
+            view = |cx, x| view! { cx,
+                path(d=x, fill="none", stroke-width="1", stroke="gray") {}
+            }
+        )
+        Indexed(
+            iterable=divs_y_path,
+            view = |cx, x| view! { cx,
+                path(d=x, fill="none", stroke-width="1", stroke="gray") {}
+            }
+        )
+
+        Indexed(
+            iterable=wl_limits_txt,
+            view = move |cx, (pos, txt)| view! { cx,
+                text(x=pos, y=(props.svg_size.get().1 - 3), font-size="0.75rem") {
+                    (txt)
+                }
+            }
+        )
+        
+        path(d=path_sqr.get(), fill="none",
+            stroke-width="2", stroke="#000000") {}
+        text(x=1, y=(props.svg_size.get().1 - 3), font-size="0.75rem") {
+            "Comp. de Onda (nm)"
+        }
+        text(x=(props.svg_size.get().0 - 28), y=12, font-size="0.75rem") {
+            "Pot."
+        }
+        text(x=(props.svg_size.get().0 - 28), y=24, font-size="0.75rem") {
+            "(dB)"
+        }
+    }
+
 }
 
 #[component]
