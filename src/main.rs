@@ -99,6 +99,13 @@ async fn get_wavelength_limits() -> (f64, f64) {
     obj_rebuilt
 }
 
+async fn get_power_limits() -> (f64, f64) {
+    let from_back = invoke("get_power_limits", to_value(&()).unwrap()).await;
+    let obj_rebuilt: (f64, f64) = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}
+
 // COMPONENTS ----------------------------
 
 #[component]
@@ -136,8 +143,8 @@ fn Graph<G:Html>(cx: Scope) -> View<G> {
                             width=svg_size.get().0,
                             height=svg_size.get().1)
                         {
-                            path(d=path.get(), fill="none", stroke="#000000", stroke-width="3") {}
                             GraphFrame(svg_size=svg_size)
+                            path(d=path.get(), fill="none", stroke="#000000", stroke-width="3") {}
                         }
                     }
                 }
@@ -155,7 +162,7 @@ struct FrameProps<'a> {
 fn GraphFrame<'a, G:Html>(cx: Scope<'a>, props: FrameProps<'a>) -> View<G> {
 
     let graph_size = create_memo(cx, || 
-        ((*props.svg_size.get()).0 - 32,        // 32 e 16 para os labels dos eixos
+        ((*props.svg_size.get()).0 - 40,        // 32 e 16 para os labels dos eixos
         (*props.svg_size.get()).1 - 16)
         
     );
@@ -197,30 +204,10 @@ fn GraphFrame<'a, G:Html>(cx: Scope<'a>, props: FrameProps<'a>) -> View<G> {
             .collect::<Vec<String>>()
     );
 
-    let wl_limits = create_signal(cx, (1500f64, 1600f64));
-    spawn_local_scoped(cx, async move {
-        loop {
-            TimeoutFuture::new(200).await;
-            let new_wl_limits = get_wavelength_limits().await;
-            if new_wl_limits != *wl_limits.get() {
-                wl_limits.set(new_wl_limits);
-            }
-        }
-    });
-
-    let wl_limits_txt = create_memo(cx, ||
-        (*divs_x.get()).iter()
-            .skip(1)
-            .map(|x|
-                (x,
-                (*wl_limits.get()).0
-                + ((*wl_limits.get()).1 - (*wl_limits.get()).0)
-                * (*x as f64) / (*graph_size.get()).0 as f64)
-            ).map(|(pos, x)| (*pos, format!("{:.2}", x)))
-            .collect::<Vec<(i32, String)>>()
-    );
 
     view! { cx,
+        rect(width=(graph_size.get().0 - 2), height=(graph_size.get().1 - 2), 
+            fill="white", x="1", y="1") {}
         Indexed(
             iterable=divs_x_path,
             view = |cx, x| view! { cx,
@@ -234,28 +221,97 @@ fn GraphFrame<'a, G:Html>(cx: Scope<'a>, props: FrameProps<'a>) -> View<G> {
             }
         )
 
-        Indexed(
-            iterable=wl_limits_txt,
-            view = move |cx, (pos, txt)| view! { cx,
-                text(x=pos, y=(props.svg_size.get().1 - 3), font-size="0.75rem") {
-                    (txt)
-                }
-            }
-        )
-        
+        GraphLabels(graph_size=graph_size, divs_x=divs_x, divs_y=divs_y)
+
         path(d=path_sqr.get(), fill="none",
             stroke-width="2", stroke="#000000") {}
-        text(x=1, y=(props.svg_size.get().1 - 3), font-size="0.75rem") {
+        text(x=1, y=(graph_size.get().1 + 13), font-size="0.75rem") {
             "Comp. de Onda (nm)"
         }
-        text(x=(props.svg_size.get().0 - 28), y=12, font-size="0.75rem") {
+        text(x=(graph_size.get().0 + 4), y=12, font-size="0.75rem") {
             "Pot."
         }
-        text(x=(props.svg_size.get().0 - 28), y=24, font-size="0.75rem") {
+        text(x=(graph_size.get().0 + 4), y=24, font-size="0.75rem") {
             "(dB)"
         }
     }
 
+}
+
+#[derive(Prop)]
+struct LabelsProps<'a> {
+    graph_size: &'a ReadSignal<(i32, i32)>,
+    divs_x: &'a ReadSignal<Vec<i32>>,
+    divs_y: &'a ReadSignal<Vec<i32>>
+}
+
+#[component]
+fn GraphLabels<'a, G:Html>(cx: Scope<'a>, props: LabelsProps<'a>) -> View<G> {
+
+    let wl_limits = create_signal(cx, (1500f64, 1600f64));
+    spawn_local_scoped(cx, async move {
+        loop {
+            TimeoutFuture::new(200).await;
+            let new_wl_limits = get_wavelength_limits().await;
+            if new_wl_limits != *wl_limits.get() {
+                wl_limits.set(new_wl_limits);
+            }
+        }
+    });
+
+    let wl_limits_txt = create_memo(cx, ||
+        (*props.divs_x.get()).iter()
+            .skip(1)
+            .map(|x|
+                (x,
+                (*wl_limits.get()).0
+                + ((*wl_limits.get()).1 - (*wl_limits.get()).0)
+                * (*x as f64) / (*props.graph_size.get()).0 as f64)
+            ).map(|(pos, x)| (*pos, format!("{:.2}", x)))
+            .collect::<Vec<(i32, String)>>()
+    );
+
+    let pwr_limits = create_signal(cx, (3f64, -50f64));
+    spawn_local_scoped(cx, async move {
+        loop {
+            TimeoutFuture::new(200).await;
+            let new_pwr_limits = get_power_limits().await;
+            if new_pwr_limits != *pwr_limits.get() {
+                pwr_limits.set(new_pwr_limits);
+            }
+        }
+    });
+
+    let pwr_limits_txt = create_memo(cx, ||
+        (*props.divs_y.get()).iter()
+            .map(|y|
+                (y,
+                (*pwr_limits.get()).0
+                + ((*pwr_limits.get()).1 - (*pwr_limits.get()).0)
+                * (*y as f64) / (*props.graph_size.get()).1 as f64)
+            ).map(|(pos, y)| (*pos + 4, format!("{:.1}", y)))
+            .collect::<Vec<(i32, String)>>()
+    );
+
+    view! { cx,
+        Indexed(
+            iterable=wl_limits_txt,
+            view = move |cx, (pos, txt)| view! { cx,
+                text(x=pos, y=(props.graph_size.get().1 + 13), font-size="0.75rem",
+                     text-anchor="middle") {
+                    (txt)
+                }
+            }
+        )
+        Indexed(
+            iterable=pwr_limits_txt,
+            view = move |cx, (pos, txt)| view! { cx,
+                text(x=(props.graph_size.get().0 + 4), y=pos, font-size="0.75rem") {
+                    (txt)
+                }
+            }
+        )
+    }
 }
 
 #[component]

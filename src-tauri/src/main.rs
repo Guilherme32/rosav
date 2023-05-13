@@ -74,6 +74,11 @@ fn get_wavelength_limits(reader: tauri::State<file_reader::FileReader>) -> (f64,
     (1500.311234, 1599.599999)
 }
 
+#[tauri::command]
+fn get_power_limits(reader: tauri::State<file_reader::FileReader>) -> (f64, f64) {
+    (3f64, -10f64)
+}
+
 fn main() {
     file_reader::test();
 
@@ -112,7 +117,8 @@ fn main() {
             get_window_size,
             get_svg_size,
             get_last_logs,
-            get_wavelength_limits
+            get_wavelength_limits,
+            get_power_limits,
         ]).run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
