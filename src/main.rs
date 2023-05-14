@@ -2,13 +2,12 @@ use sycamore::prelude::*;
 // use itertools::Itertools;
 // use std::iter;
 
-use wasm_bindgen::prelude::*;
-use serde::{Serialize, Deserialize};
-use sycamore::futures::spawn_local_scoped;
-use serde_wasm_bindgen::{to_value, from_value};
+use sycamore::futures::{ spawn_local_scoped };
 
 use gloo_timers::future::TimeoutFuture;
-use std::fmt;
+
+pub mod api;
+use api::*;
 
 
 fn main() {
@@ -23,88 +22,6 @@ fn main() {
     })
 }
 
-
-// API -------------------------------
-
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "tauri"])]
-    async fn invoke(cmd: &str, args: JsValue) -> JsValue;
-}
-
-
-async fn unread_spectrum() -> bool {
-    let from_back = invoke("unread_spectrum", to_value(&()).unwrap()).await;
-    let obj_rebuilt: bool = from_value(from_back).unwrap();
-
-    obj_rebuilt
-}
-
-async fn get_last_spectrum_path() -> Option<String> {
-    let from_back = invoke("get_last_spectrum_path", to_value(&()).unwrap()).await;
-    let obj_rebuilt: Option<String> = from_value(from_back).unwrap();
-
-    obj_rebuilt
-}
-
-// É i32 para poder fazer subtração, mas sempre será > 0 nos limites do programa
-async fn get_window_size() -> (i32, i32) {
-    let from_back = invoke("get_window_size", to_value(&()).unwrap()).await;
-    let obj_rebuilt: (i32, i32) = from_value(from_back).unwrap();
-
-    obj_rebuilt
-}
-
-async fn get_svg_size() -> (i32, i32) {
-    let from_back = invoke("get_svg_size", to_value(&()).unwrap()).await;
-    let obj_rebuilt: (i32, i32) = from_value(from_back).unwrap();
-
-    obj_rebuilt
-}
-
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
-struct Log {
-    id: u32,
-    msg: String,
-    log_type: LogType
-}
-
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
-enum LogType {
-    Info,
-    Warning,
-    Error
-}
-impl fmt::Display for LogType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        match self {
-            LogType::Info => write!(f, "info"),
-            LogType::Warning => write!(f, "warning"),
-            LogType::Error => write!(f, "error")
-        }
-    }
-}
-
-async fn get_last_logs() -> Vec::<Log> {
-    let from_back = invoke("get_last_logs", to_value(&()).unwrap()).await;
-    let obj_rebuilt: Vec::<Log> = from_value(from_back).unwrap();
-
-    obj_rebuilt
-}
-
-async fn get_wavelength_limits() -> (f64, f64) {
-    let from_back = invoke("get_wavelength_limits", to_value(&()).unwrap()).await;
-    let obj_rebuilt: (f64, f64) = from_value(from_back).unwrap();
-
-    obj_rebuilt
-}
-
-async fn get_power_limits() -> (f64, f64) {
-    let from_back = invoke("get_power_limits", to_value(&()).unwrap()).await;
-    let obj_rebuilt: (f64, f64) = from_value(from_back).unwrap();
-
-    obj_rebuilt
-}
 
 // COMPONENTS ----------------------------
 
@@ -346,73 +263,117 @@ fn SideBar<G:Html>(cx: Scope) -> View<G> {
     }
 }
 
+#[derive(Clone, PartialEq, Debug)]
+struct Trace {
+    id: u8,
+    visible: bool,
+    draw_valleys: bool,                // TODO adicionar detecção de vale
+    active: bool,
+    valleys: Vec<f64>,
+    svg_size: (i32, i32),
+    svg_path: String,
+    freeze_time: Option<String>        // Se None não está congelado
+}
+
+fn new_trace(id: u8) -> Trace {
+    Trace {
+        id,
+        visible: true,
+        draw_valleys: true,
+        active: true,
+        valleys: vec![],
+        svg_size: (0, 0),
+        svg_path: String::new(),
+        freeze_time: None
+    }
+}
+
+fn trace_id_to_name(id: u8) -> String {
+    if id > 25 {
+        format!("{}", id)
+    } else {
+        let letters = vec!["A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
+                           "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
+                           "U", "V", "W", "X", "Y", "Z"];
+        format!("{}", letters[id as usize])
+    }
+}
+
+#[derive(Prop)]
+struct RenderTraceProps<'a> {
+    trace: Trace,
+    traces_list: &'a Signal<Vec<Trace>>
+}
+
+async fn freeze_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
+    for mut trace in traces_list.modify().iter_mut() {
+        if trace.id != id {
+            continue;
+        }
+
+        trace.freeze_time = Some(get_time().await);
+        trace.active = false;
+        // TODO mandar congelar no backend tb
+
+        break;
+    }
+}
+
+#[component]
+fn RenderTrace<'a, G:Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<G> {
+    let freeze = move |_| {
+        spawn_local_scoped(cx, async move {
+            freeze_callback(props.trace.id, props.traces_list).await;
+        })
+    };
+
+    view! { cx, 
+        div(class="trace") {
+            span(class="name") { (trace_id_to_name(props.trace.id)) }
+            span(class="status") {
+                (match &props.trace.freeze_time {
+                    Some(time) => time.clone(),
+                    None => "(Ativo)".to_string()
+                })
+            }
+            div(class="buttons") {
+                (match props.trace.active {
+                    true => view! { cx, button(on:click=freeze) { " " } },
+                    false => view! { cx, button() { "󰜺 " } }
+                })
+                (if props.trace.visible {
+                    view! { cx, button() { " " } }
+                } else {
+                    view! { cx, button() { " " } }
+                })
+                button() { " " }
+                (if props.trace.draw_valleys {
+                    view! { cx, button() { "󰽅 " } }
+                } else {
+                    view! { cx, button() { "󰆣 " } }
+                })
+            }
+        }
+    }
+}
+
 #[component]
 fn SideBarMain<G:Html>(cx: Scope) -> View<G> {
+    let traces = create_signal(cx, vec![
+        new_trace(0),
+        new_trace(1),
+        new_trace(2)
+    ]);
+
     view! { cx,
         div(class="side-bar-main") {
             p(class="title") { "Traços" }
 
             div(class="trace-container back") {
-                div(class="trace") {
-                    span(class="name") { "A" }
-                    span(class="status") { "(10:24)" }
-                    div(class="buttons") {
-                        button() { "󰜺 " }
-                        button() { " " }
-                        button() { " " }
-                        button() { "⚡" }
-                    }
-                }
-                div(class="trace") {
-                    span(class="name") { "A" }
-                    span(class="status") { "(10:24)" }
-                    div(class="buttons") {
-                        button() { "󰜺 " }
-                        button() { " " }
-                        button() { " " }
-                        button() { "⚡" }
-                    }
-                }
-                div(class="trace") {
-                    span(class="name") { "B" }
-                    span(class="status") { "(10:24)" }
-                    div(class="buttons") {
-                        button() { "󰜺 " }
-                        button() { " " }
-                        button() { " " }
-                        button() { "⚡" }
-                    }
-                }
-                div(class="trace") {
-                   span(class="name") { "C" }
-                    span(class="status") { "(10:24)" }
-                    div(class="buttons") {
-                        button() { "󰜺 " }
-                        button() { " " }
-                        button() { " " }
-                        button() { "⚡" }
-                    }
-                }
-                div(class="trace") {
-                   span(class="name") { "D" }
-                    span(class="status") { "(10:24)" }
-                    div(class="buttons") {
-                        button() { "󰜺 " }
-                        button() { " " }
-                        button() { " " }
-                        button() { "⚡" }
-                    }
-                }
-                div(class="trace") {
-                    span(class="name") { "A" }
-                    span(class="status") { "(10:24)" }
-                    div(class="buttons") {
-                        button() { "󰜺 " }
-                        button() { " " }
-                        button() { " " }
-                        button() { "⚡" }
-                    }
-                }
+                Indexed(
+                    iterable = traces,
+                    view = move |cx, trace| view! { cx, RenderTrace(trace=trace, traces_list=&traces) }
+                )
                 div(class="trace") {
                    span(class="name") { "E" }
                     span(class="status") { "(Ativo)" }

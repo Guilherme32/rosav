@@ -8,6 +8,18 @@ use app::file_reader;
 // use std::time::Duration;
 use serde::{Serialize, Deserialize};
 use std::sync::{ atomic, Mutex };
+use chrono::prelude::*;
+
+
+#[tauri::command]
+fn hello() {
+    println!("Hello");
+}
+
+#[tauri::command]
+fn print_backend(msg: &str) {
+    println!("From front: {}", msg);
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Log {
@@ -70,6 +82,11 @@ fn get_last_logs(logs: tauri::State<Mutex<Vec::<Log>>>) -> Vec::<Log> {
 }
 
 #[tauri::command]
+fn get_time() -> String {
+    Local::now().format("(%H:%M)").to_string()
+}
+
+#[tauri::command]
 fn get_wavelength_limits(reader: tauri::State<file_reader::FileReader>) -> (f64, f64) {
     (1500.311234, 1599.599999)
 }
@@ -95,7 +112,7 @@ fn main() {
             log_type: LogType::Info
         });
     };
-        
+
     // loop {
     //     sleep(Duration::from_secs(1));
     //     let unread = reader.unread_spectrum.load(atomic::Ordering::Relaxed);
@@ -112,6 +129,8 @@ fn main() {
         .manage(reader)
         .manage(log)
         .invoke_handler(tauri::generate_handler![
+            hello,
+            print_backend,
             unread_spectrum,
             get_last_spectrum_path,
             get_window_size,
@@ -119,6 +138,7 @@ fn main() {
             get_last_logs,
             get_wavelength_limits,
             get_power_limits,
+            get_time,
         ]).run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
