@@ -299,6 +299,22 @@ fn trace_id_to_name(id: u8) -> String {
     }
 }
 
+fn trace_id_to_color(id: u8) -> String {
+    // TODO passar essa função pro backend e pegar de um arquivo de configuração
+    if id > 8 {
+        trace_id_to_color(id - 8)
+    } else {
+         let colors = vec!["#ce1417", "#377eb8", "#4daf4a", "#984ea3",
+                           "#ff7f00", "#ffff33", "#a65628", "#f781bf",
+                           "#999999"];
+        format!("{}", colors[id as usize])
+    }
+}
+
+fn trace_id_to_style(id: u8) -> String {
+    format!("background-color: {};", trace_id_to_color(id))
+}
+
 #[derive(Prop)]
 struct RenderTraceProps<'a> {
     trace: Trace,
@@ -306,17 +322,41 @@ struct RenderTraceProps<'a> {
 }
 
 async fn freeze_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
-    for mut trace in traces_list.modify().iter_mut() {
-        if trace.id != id {
-            continue;
-        }
+    let mut traces_list = traces_list.modify();
 
-        trace.freeze_time = Some(get_time().await);
-        trace.active = false;
-        // TODO mandar congelar no backend tb
+    let trace = &mut traces_list[id as usize];
+    trace.freeze_time = Some(get_time().await);
+    trace.active = false;
 
-        break;
+    traces_list.push(new_trace(id+1));
+
+    // TODO mandar congelar no backend tb
+}
+
+async fn delete_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
+    traces_list.modify().remove(id as usize);
+
+    for (i, mut trace) in traces_list.modify().iter_mut().enumerate() {
+        trace.id = i as u8;
     }
+
+    // TODO mandar deletar no backend tb
+}
+
+async fn visibility_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
+    let trace = &mut traces_list.modify()[id as usize];
+    trace.visible = !trace.visible;
+}
+
+async fn save_callback<'a>(_id: u8, _traces_list: &'a Signal<Vec<Trace>>) {
+    print_backend(&format!("{:?}", _traces_list)).await;
+    hello().await;
+    // TODO mandar salvar o espectro pelo backend
+}
+
+async fn draw_valleys_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
+    let trace = &mut traces_list.modify()[id as usize];
+    trace.draw_valleys = !trace.draw_valleys;
 }
 
 #[component]
@@ -326,10 +366,32 @@ fn RenderTrace<'a, G:Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<G
             freeze_callback(props.trace.id, props.traces_list).await;
         })
     };
+    let delete = move |_| {
+        spawn_local_scoped(cx, async move {
+            delete_callback(props.trace.id, props.traces_list).await;
+        })
+    };
+    let visibility = move |_| {
+        spawn_local_scoped(cx, async move {
+            visibility_callback(props.trace.id, props.traces_list).await;
+        })
+    };
+    let save = move |_| {
+        spawn_local_scoped(cx, async move {
+            save_callback(props.trace.id, props.traces_list).await;
+        })
+    };
+    let draw_valleys = move |_| {
+        spawn_local_scoped(cx, async move {
+            draw_valleys_callback(props.trace.id, props.traces_list).await;
+        })
+    };
 
     view! { cx, 
         div(class="trace") {
-            span(class="name") { (trace_id_to_name(props.trace.id)) }
+            span(class="name", style=trace_id_to_style(props.trace.id)) {
+                (trace_id_to_name(props.trace.id))
+            }
             span(class="status") {
                 (match &props.trace.freeze_time {
                     Some(time) => time.clone(),
@@ -339,18 +401,18 @@ fn RenderTrace<'a, G:Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<G
             div(class="buttons") {
                 (match props.trace.active {
                     true => view! { cx, button(on:click=freeze) { " " } },
-                    false => view! { cx, button() { "󰜺 " } }
+                    false => view! { cx, button(on:click=delete) { "󰜺 " } }
                 })
                 (if props.trace.visible {
-                    view! { cx, button() { " " } }
+                    view! { cx, button(on:click=visibility) { " " } }
                 } else {
-                    view! { cx, button() { " " } }
+                    view! { cx, button(on:click=visibility) { " " } }
                 })
-                button() { " " }
+                button(on:click=save) { " " }
                 (if props.trace.draw_valleys {
-                    view! { cx, button() { "󰽅 " } }
+                    view! { cx, button(on:click=draw_valleys) { "󰽅 " } }
                 } else {
-                    view! { cx, button() { "󰆣 " } }
+                    view! { cx, button(on:click=draw_valleys) { "󰆤 " } }
                 })
             }
         }
@@ -359,11 +421,14 @@ fn RenderTrace<'a, G:Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<G
 
 #[component]
 fn SideBarMain<G:Html>(cx: Scope) -> View<G> {
-    let traces = create_signal(cx, vec![
-        new_trace(0),
-        new_trace(1),
-        new_trace(2)
-    ]);
+    let traces = create_signal(cx, vec![new_trace(0)]);
+
+    // create_effect(cx, move || {
+    //     let msg = format!("\nTraces changed: {:?}\n", traces);
+    //     spawn_local_scoped(cx, async move {
+    //         print_backend(&msg).await;
+    //     })
+    // });
 
     view! { cx,
         div(class="side-bar-main") {
@@ -374,16 +439,6 @@ fn SideBarMain<G:Html>(cx: Scope) -> View<G> {
                     iterable = traces,
                     view = move |cx, trace| view! { cx, RenderTrace(trace=trace, traces_list=&traces) }
                 )
-                div(class="trace") {
-                   span(class="name") { "E" }
-                    span(class="status") { "(Ativo)" }
-                    div(class="buttons") {
-                        button() { "󰜺 " }
-                        button() { " " }
-                        button() { " " }
-                        button() { "⚡" }
-                    }
-                }
             }
 
             div(class="trace-paging") {
