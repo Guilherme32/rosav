@@ -44,9 +44,9 @@ fn unread_spectrum(reader: tauri::State<file_reader::FileReader>) -> bool {
 fn get_last_spectrum_path(
     reader: tauri::State<file_reader::FileReader>,
     window: tauri::Window
-) -> Option<String> 
+) -> String 
 {
-    reader.get_last_spectrum_path(get_svg_size(window))
+    reader.get_last_spectrum_path(get_svg_size(window)).unwrap_or(String::new())
 }
 
 #[tauri::command]

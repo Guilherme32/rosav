@@ -26,23 +26,32 @@ fn main() {
 fn Main<G:Html>(cx: Scope) -> View<G> {
     let traces = create_signal(cx, vec![new_trace(0)]);
 
-    let is_ready = create_signal(cx, false);
     let svg_size = create_signal(cx, (0i32, 0i32));
 
     spawn_local_scoped(cx, async move {
         loop {
             TimeoutFuture::new(200).await;
-            if unread_spectrum().await {
-                if let Some(spectrum_path) = get_last_spectrum_path().await {
-                    traces.modify().last_mut().map(|trace| {
-                        trace.svg_size = *svg_size.get();
-                        trace.svg_path = spectrum_path;
-                    });
+            if unread_spectrum().await {                // Get the latest spectrum if it is available
+                let new_path = get_last_spectrum_path().await;
+                traces.modify().last_mut().map(|trace| {
+                    trace.svg_size = *svg_size.get();
+                    trace.svg_path = new_path;
+                });
+                continue;                // Skip the loop to end the modify() and avoid problems
+            }
+
+            let new_svg_size = get_svg_size().await;
+            for trace in traces.modify().iter_mut() {                        // Update when the window changes
+                if trace.svg_size !=  new_svg_size {
+                    trace.svg_size = new_svg_size;
+                    if trace.active {
+                        trace.svg_path = get_last_spectrum_path().await;
+                    } else {
+                        // TODO Get frozen path
+                    }
                 }
             }
-            is_ready.set(unread_spectrum().await);
-
-            svg_size.set(get_svg_size().await);
+            svg_size.set(new_svg_size);
         }
     });
 
@@ -99,6 +108,12 @@ fn Graph<'a, G:Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
                             height=props.svg_size.get().1)
                         {
                             GraphFrame(svg_size=props.svg_size)
+                            clipPath(id="graph-clip") {
+                                rect(
+                                    width=(props.svg_size.get().0 - 44),
+                                    height=(props.svg_size.get().1 - 20), 
+                                    x="2", y="2") {}
+                            }
                             Indexed(
                                 iterable=props.traces,
                                 view = |cx, trace| if trace.visible { 
@@ -107,7 +122,9 @@ fn Graph<'a, G:Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
                                             d=trace.svg_path,
                                             fill="none",
                                             stroke-width="2",
-                                            stroke=trace_id_to_color(trace.id)) {}
+                                            stroke=trace_id_to_color(trace.id),
+                                            clip-path="url(#graph-clip)"
+                                            ) {}
                                     } 
                                 } else { view! { cx, "" } }
                             )

@@ -30,9 +30,9 @@ pub async fn unread_spectrum() -> bool {
     obj_rebuilt
 }
 
-pub async fn get_last_spectrum_path() -> Option<String> {
+pub async fn get_last_spectrum_path() -> String {
     let from_back = invoke("get_last_spectrum_path", to_value(&()).unwrap()).await;
-    let obj_rebuilt: Option<String> = from_value(from_back).unwrap();
+    let obj_rebuilt: String = from_value(from_back).unwrap();
 
     obj_rebuilt
 }
