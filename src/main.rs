@@ -9,16 +9,13 @@ use gloo_timers::future::TimeoutFuture;
 pub mod api;
 use api::*;
 
+pub mod trace;
+use trace::*;
+
 
 fn main() {
     sycamore::render(|cx| view!{ cx,
-        div(class="horizontal-container") {
-            SideBar {}
-            div(class="vertical-container") {
-                Graph {}
-                LowerBar {}
-            }
-        }
+        Main {}
     })
 }
 
@@ -26,9 +23,10 @@ fn main() {
 // COMPONENTS ----------------------------
 
 #[component]
-fn Graph<G:Html>(cx: Scope) -> View<G> {
+fn Main<G:Html>(cx: Scope) -> View<G> {
+    let traces = create_signal(cx, vec![new_trace(0)]);
+
     let is_ready = create_signal(cx, false);
-    let path = create_signal(cx, String::new());
     let svg_size = create_signal(cx, (0i32, 0i32));
 
     spawn_local_scoped(cx, async move {
@@ -36,7 +34,10 @@ fn Graph<G:Html>(cx: Scope) -> View<G> {
             TimeoutFuture::new(200).await;
             if unread_spectrum().await {
                 if let Some(spectrum_path) = get_last_spectrum_path().await {
-                    path.set(spectrum_path);
+                    traces.modify().last_mut().map(|trace| {
+                        trace.svg_size = *svg_size.get();
+                        trace.svg_path = spectrum_path;
+                    });
                 }
             }
             is_ready.set(unread_spectrum().await);
@@ -44,6 +45,43 @@ fn Graph<G:Html>(cx: Scope) -> View<G> {
             svg_size.set(get_svg_size().await);
         }
     });
+
+    view!{ cx,
+        div(class="horizontal-container") {
+            SideBar(traces=traces)
+            div(class="vertical-container") {
+                Graph(traces=traces, svg_size=svg_size)
+                LowerBar {}
+            }
+        }
+    }
+}
+
+#[derive(Prop)]
+struct GraphProps<'a> {
+    svg_size: &'a ReadSignal<(i32, i32)>,
+    traces: &'a ReadSignal<Vec<Trace>>
+}
+
+#[component]
+fn Graph<'a, G:Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
+    // let is_ready = create_signal(cx, false);
+    // let path = create_signal(cx, String::new());
+    // let svg_size = create_signal(cx, (0i32, 0i32));
+
+    // spawn_local_scoped(cx, async move {
+    //     loop {
+    //         TimeoutFuture::new(200).await;
+    //         if unread_spectrum().await {
+    //             if let Some(spectrum_path) = get_last_spectrum_path().await {
+    //                 path.set(spectrum_path);
+    //             }
+    //         }
+    //         is_ready.set(unread_spectrum().await);
+
+    //         svg_size.set(get_svg_size().await);
+    //     }
+    // });
 
     view! { cx,
         div(class="graph-space back") {
@@ -57,11 +95,22 @@ fn Graph<G:Html>(cx: Scope) -> View<G> {
             } else {
                     view! { cx,
                         svg(
-                            width=svg_size.get().0,
-                            height=svg_size.get().1)
+                            width=props.svg_size.get().0,
+                            height=props.svg_size.get().1)
                         {
-                            GraphFrame(svg_size=svg_size)
-                            path(d=path.get(), fill="none", stroke="#000000", stroke-width="3") {}
+                            GraphFrame(svg_size=props.svg_size)
+                            Indexed(
+                                iterable=props.traces,
+                                view = |cx, trace| if trace.visible { 
+                                    view! { cx,
+                                        path(
+                                            d=trace.svg_path,
+                                            fill="none",
+                                            stroke-width="2",
+                                            stroke=trace_id_to_color(trace.id)) {}
+                                    } 
+                                } else { view! { cx, "" } }
+                            )
                         }
                     }
                 }
@@ -253,66 +302,19 @@ fn LowerBar<G:Html>(cx: Scope) -> View<G> {
     }
 }
 
+#[derive(Prop)]
+struct SideBarProps<'a> {
+    traces: &'a Signal<Vec<Trace>>
+}
+
 #[component]
-fn SideBar<G:Html>(cx: Scope) -> View<G> {
+fn SideBar<'a, G:Html>(cx: Scope<'a>, props: SideBarProps<'a>) -> View<G> {
     view! { cx,
         div(class="side-bar") {
-            SideBarMain {}
+            SideBarMain(traces=props.traces)
             LogSpace {}
         }
     }
-}
-
-#[derive(Clone, PartialEq, Debug)]
-struct Trace {
-    id: u8,
-    visible: bool,
-    draw_valleys: bool,                // TODO adicionar detecção de vale
-    active: bool,
-    valleys: Vec<f64>,
-    svg_size: (i32, i32),
-    svg_path: String,
-    freeze_time: Option<String>        // Se None não está congelado
-}
-
-fn new_trace(id: u8) -> Trace {
-    Trace {
-        id,
-        visible: true,
-        draw_valleys: true,
-        active: true,
-        valleys: vec![],
-        svg_size: (0, 0),
-        svg_path: String::new(),
-        freeze_time: None
-    }
-}
-
-fn trace_id_to_name(id: u8) -> String {
-    if id > 25 {
-        format!("{}", id)
-    } else {
-        let letters = vec!["A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
-                           "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
-                           "U", "V", "W", "X", "Y", "Z"];
-        format!("{}", letters[id as usize])
-    }
-}
-
-fn trace_id_to_color(id: u8) -> String {
-    // TODO passar essa função pro backend e pegar de um arquivo de configuração
-    if id > 8 {
-        trace_id_to_color(id - 8)
-    } else {
-         let colors = vec!["#ce1417", "#377eb8", "#4daf4a", "#984ea3",
-                           "#ff7f00", "#ffff33", "#a65628", "#f781bf",
-                           "#999999"];
-        format!("{}", colors[id as usize])
-    }
-}
-
-fn trace_id_to_style(id: u8) -> String {
-    format!("background-color: {};", trace_id_to_color(id))
 }
 
 #[derive(Prop)]
@@ -325,6 +327,10 @@ async fn freeze_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
     let mut traces_list = traces_list.modify();
 
     let trace = &mut traces_list[id as usize];
+    if trace.svg_path.len() == 0 {        // Nao pode congelar onde não tem espectro
+        return ();
+    }
+
     trace.freeze_time = Some(get_time().await);
     trace.active = false;
 
@@ -419,9 +425,14 @@ fn RenderTrace<'a, G:Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<G
     }
 }
 
+#[derive(Prop)]
+struct SideBarMainProps<'a> {
+    traces: &'a Signal<Vec<Trace>>
+}
+
 #[component]
-fn SideBarMain<G:Html>(cx: Scope) -> View<G> {
-    let traces = create_signal(cx, vec![new_trace(0)]);
+fn SideBarMain<'a, G:Html>(cx: Scope<'a>, props: SideBarMainProps<'a>) -> View<G> {
+    // let traces = create_signal(cx, vec![new_trace(0)]);
 
     // create_effect(cx, move || {
     //     let msg = format!("\nTraces changed: {:?}\n", traces);
@@ -436,15 +447,11 @@ fn SideBarMain<G:Html>(cx: Scope) -> View<G> {
 
             div(class="trace-container back") {
                 Indexed(
-                    iterable = traces,
-                    view = move |cx, trace| view! { cx, RenderTrace(trace=trace, traces_list=&traces) }
+                    iterable = props.traces,
+                    view = move |cx, trace| view! { 
+                        cx, RenderTrace(trace=trace, traces_list=&props.traces)
+                    }
                 )
-            }
-
-            div(class="trace-paging") {
-                button() { " << " }
-                p() { "10/10" }
-                button() { " >> " }
             }
         }
     }

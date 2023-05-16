@@ -120,7 +120,7 @@ impl FileReader {
     }
 
 
-    pub fn get_last_spectrum_path(&self, svg_limits: (f64, f64)) -> Option<String> {
+    pub fn get_last_spectrum_path(&self, svg_limits: (u32, u32)) -> Option<String> {
         let spectrum = match self.last_spectrum.lock() {
             Ok(spectrum) => spectrum,
             Err(error) => { 

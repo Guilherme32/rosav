@@ -83,7 +83,9 @@ impl Spectrum {
         }
     }
 
-    pub fn to_path(&self, svg_limits: (f64, f64)) -> String {
+    pub fn to_path(&self, svg_limits: (u32, u32)) -> String {
+        let svg_limits = (svg_limits.0 as f64 - 40.0,
+                          svg_limits.1 as f64 - 16.6);
         let limits_pwr = (2f64, -50f64);        // #TODO to config
 
         if self.values.len() == 0 {
@@ -100,7 +102,6 @@ impl Spectrum {
 
         let path = &self.values.iter()
             .skip(1)
-            .step_by(self.values.len()/200)            // #TODO to config (200)
             .map(cvt)
             .tuple_windows()
             .map(|(a,b,c,d)| bezier_point(a, b, c, d))

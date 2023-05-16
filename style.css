@@ -63,16 +63,20 @@
 
 .trace-container {
   flex: 1;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
-.trace-paging {
-  display: flex;
-  flex-direction: line;
-  justify-content: space-between;
+.trace-container::-webkit-scrollbar {
+  width: 5px;
+}
 
-  border-top: 2px solid black;
-  padding: 3px;
+.trace-container::-webkit-scrollbar-thumb { /* Foreground */
+  background: black;
+}
+
+.trace-container::-webkit-scrollbar-track { /* Background */
+  background: #c9cfdd;
 }
 
 .trace {

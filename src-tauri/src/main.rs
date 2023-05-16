@@ -41,8 +41,12 @@ fn unread_spectrum(reader: tauri::State<file_reader::FileReader>) -> bool {
 }
 
 #[tauri::command]
-fn get_last_spectrum_path(reader: tauri::State<file_reader::FileReader>) -> Option<String> {
-    reader.get_last_spectrum_path((480.0, 360.0))
+fn get_last_spectrum_path(
+    reader: tauri::State<file_reader::FileReader>,
+    window: tauri::Window
+) -> Option<String> 
+{
+    reader.get_last_spectrum_path(get_svg_size(window))
 }
 
 #[tauri::command]
@@ -87,12 +91,12 @@ fn get_time() -> String {
 }
 
 #[tauri::command]
-fn get_wavelength_limits(reader: tauri::State<file_reader::FileReader>) -> (f64, f64) {
+fn get_wavelength_limits(_reader: tauri::State<file_reader::FileReader>) -> (f64, f64) {
     (1500.311234, 1599.599999)
 }
 
 #[tauri::command]
-fn get_power_limits(reader: tauri::State<file_reader::FileReader>) -> (f64, f64) {
+fn get_power_limits(_reader: tauri::State<file_reader::FileReader>) -> (f64, f64) {
     (3f64, -10f64)
 }
 
