@@ -18,6 +18,12 @@ pub struct Spectrum {
     values: Vec<SpectrumValue>
 }
 
+#[derive(Debug)]
+pub struct Limits {
+    pub wavelength: (f64, f64),
+    pub power: (f64, f64)
+}
+
 impl fmt::Display for Spectrum {
     fn fmt(&self, f:&mut fmt::Formatter<'_>) -> fmt::Result {
         for value in &self.values {
@@ -83,18 +89,16 @@ impl Spectrum {
         }
     }
 
-    pub fn to_path(&self, svg_limits: (u32, u32)) -> String {
+    pub fn to_path(&self, svg_limits: (u32, u32), graph_limits: &Limits) -> String {
         let svg_limits = (svg_limits.0 as f64 - 40.0,
                           svg_limits.1 as f64 - 16.6);
-        let limits_pwr = (2f64, -50f64);        // #TODO to config
+
+        let limits_pwr = (graph_limits.power.1, graph_limits.power.0);        // TODO to config
+        let limits_wl = graph_limits.wavelength;    // TODO opt config
 
         if self.values.len() == 0 {
             return "".to_string();
         }
-
-                                        // #TODO to opt config
-        let limits_wl = (self.values.first().unwrap().wavelength,        // Can unwrap because length
-                     self.values.last().unwrap().wavelength);             // is checked above
 
         let cvt = |point| convert_point(&limits_wl, &limits_pwr, &svg_limits, point);
         let start = cvt(&self.values[0]);
@@ -109,6 +113,33 @@ impl Spectrum {
         let path = format!("{start}{path}");
 
         return path.to_string();
+    }
+
+    pub fn get_limits(&self) -> Limits {
+        let mut wl_min: f64 = 10_000.0;        // Values that will always be outside the range
+        let mut wl_max: f64 = 0.0;
+        let mut pwr_min: f64 = 1000.0;
+        let mut pwr_max: f64 = -1000.0;
+
+        for value in self.values.iter() {
+            if value.wavelength > wl_max {
+                wl_max = value.wavelength;
+            }
+            if value.wavelength < wl_min {
+                wl_min = value.wavelength;
+            }
+            if value.power > pwr_max {
+                pwr_max = value.power;
+            }
+            if value.power < pwr_min {
+                pwr_min = value.power;
+            }
+        }
+
+        Limits {
+            wavelength: (wl_min, wl_max),
+            power: (pwr_min - 3.0, pwr_max + 3.0)
+        }
     }
 }
 

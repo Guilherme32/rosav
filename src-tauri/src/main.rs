@@ -46,6 +46,7 @@ fn get_last_spectrum_path(
     window: tauri::Window
 ) -> String 
 {
+    reader.update_limits();
     reader.get_last_spectrum_path(get_svg_size(window)).unwrap_or(String::new())
 }
 
@@ -91,13 +92,37 @@ fn get_time() -> String {
 }
 
 #[tauri::command]
-fn get_wavelength_limits(_reader: tauri::State<file_reader::FileReader>) -> (f64, f64) {
-    (1500.311234, 1599.599999)
+fn get_wavelength_limits(reader: tauri::State<file_reader::FileReader>) -> (f64, f64) {
+    let limits = match reader.spectrum_limits.lock() {
+        Ok(limits) => limits,
+        Err(_) => {
+            println!("[MWL] Could not get the lock to read the limits");
+            return (1000.0, 2000.0);
+        }
+    };
+
+    if let Some(limits) = &*limits {
+        limits.wavelength
+    } else {
+        (1010.0, 1990.0)
+    }
 }
 
 #[tauri::command]
-fn get_power_limits(_reader: tauri::State<file_reader::FileReader>) -> (f64, f64) {
-    (3f64, -10f64)
+fn get_power_limits(reader: tauri::State<file_reader::FileReader>) -> (f64, f64) {
+    let limits = match reader.spectrum_limits.lock() {
+        Ok(limits) => limits,
+        Err(_) => {
+            println!("[MWL] Could not get the lock to read the limits");
+            return (10.0, -5.0);
+        }
+    };
+
+    if let Some(limits) = &*limits {
+        (limits.power.1, limits.power.0)
+    } else {
+        (10.5, -10.0)
+    }
 }
 
 fn main() {

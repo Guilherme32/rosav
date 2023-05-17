@@ -13,7 +13,7 @@ use std::thread::sleep;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{ self, AtomicBool };
 
-use crate::spectrum::Spectrum;
+use crate::spectrum::*;
 
 pub fn test() {
     println!("funcao de teste");
@@ -42,6 +42,7 @@ pub struct FileReader {
     pub last_spectrum: Arc<Mutex<Option<Spectrum>>>,
     pub frozen_spectra: Vec<Spectrum>,
     pub unread_spectrum: Arc<AtomicBool>,
+    pub spectrum_limits: Mutex<Option<Limits>>,
     state: ReaderState
 }
 
@@ -129,10 +130,69 @@ impl FileReader {
             }
         };
 
-        self.unread_spectrum.store(false, atomic::Ordering::Relaxed);
-        match &*spectrum {
-            Some(spectrum) => Some(spectrum.to_path(svg_limits)),
-            None => None
+        let spec_limits = match self.spectrum_limits.lock() {
+            Ok(spec_limits) => spec_limits,
+            Err(error) => { 
+                println!("[FUL] Could not acquire the lock to get last limits ({})", error);
+                return None;
+            }
+        };
+
+        if let Some(spec_limits) = &*spec_limits {
+            self.unread_spectrum.store(false, atomic::Ordering::Relaxed);
+            match &*spectrum {
+                Some(spectrum) => Some(spectrum.to_path(svg_limits, spec_limits)),
+                None => None
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn update_limits(&self) {
+        let spectrum = match self.last_spectrum.lock() {
+            Ok(spectrum) => spectrum,
+            Err(error) => { 
+                println!("[FUL] Could not acquire the lock to get last spectrum ({})", error);
+                return ();
+            }
+        };
+
+        let mut limits = match self.spectrum_limits.lock() {
+            Ok(limits) => limits,
+            Err(error) => { 
+                println!("[FUL] Could not acquire the lock to get last limits ({})", error);
+                return ();
+            }
+        };
+
+        if let Some(spectrum) = &*spectrum {
+            let new_limits = spectrum.get_limits();
+
+            if let Some(_limits) = &*limits {
+                let (mut new_wl_min, mut new_wl_max) = new_limits.wavelength;
+                let (mut new_pwr_min, mut new_pwr_max) = new_limits.power;
+
+                if _limits.wavelength.0 < new_wl_min {
+                    new_wl_min = _limits.wavelength.0;
+                }
+                if _limits.wavelength.1 > new_wl_max {
+                    new_wl_max = _limits.wavelength.1;
+                }
+                if _limits.power.0 < new_pwr_min {
+                    new_pwr_min = _limits.power.0;
+                }
+                if _limits.power.1 > new_pwr_max {
+                    new_pwr_max = _limits.power.1;
+                }
+
+                *limits = Some(Limits {
+                    wavelength: (new_wl_min, new_wl_max),
+                    power: (new_pwr_min, new_pwr_max)
+                });
+            } else {
+                *limits = Some(new_limits);
+            }
         }
     }
 
@@ -144,6 +204,7 @@ pub fn new_file_reader(path: String) -> FileReader {
         last_spectrum: Arc::new(Mutex::new(None)),
         frozen_spectra: vec![],
         unread_spectrum: Arc::new(AtomicBool::new(false)),
+        spectrum_limits: Mutex::new(None),
         state: ReaderState::Disconnected
     }
 }
