@@ -3,11 +3,11 @@
     windows_subsystem = "windows"
 )]
 
-use app::file_reader;
+use app::{ file_reader, Log, LogType, new_log };
 // use std::thread::sleep;
 // use std::time::Duration;
-use serde::{Serialize, Deserialize};
-use std::sync::{ atomic, Mutex };
+// use serde::{Serialize, Deserialize};
+use std::sync::{ atomic, Mutex, mpsc };
 use chrono::prelude::*;
 
 
@@ -19,20 +19,6 @@ fn hello() {
 #[tauri::command]
 fn print_backend(msg: &str) {
     println!("From front: {}", msg);
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Log {
-    id: u32,
-    msg: String,
-    log_type: LogType
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-enum LogType {
-    Info,
-    Warning,
-    Error
 }
 
 #[tauri::command]
@@ -75,15 +61,21 @@ fn get_svg_size(window: tauri::Window) -> (u32, u32) {
      win_size_scaled.1 - 27 - 32)
 }
 
-#[tauri::command]
-fn get_last_logs(logs: tauri::State<Mutex<Vec::<Log>>>) -> Vec::<Log> {
-    let mut logs_lock = logs.lock().unwrap();
-    let mut new_vec = Vec::<Log>::with_capacity((*logs_lock).len());
-    while !(*logs_lock).is_empty() {
-        new_vec.push((*logs_lock).remove(0));
-    }
+// #[tauri::command]
+// fn get_last_logs(logs: tauri::State<Mutex<Vec::<Log>>>) -> Vec::<Log> {
+//     let mut logs_lock = logs.lock().unwrap();
+//     let mut new_vec = Vec::<Log>::with_capacity((*logs_lock).len());
+//     while !(*logs_lock).is_empty() {
+//         new_vec.push((*logs_lock).remove(0));
+//     }
 
-    new_vec
+//     new_vec
+// }
+
+#[tauri::command]
+fn get_last_logs(logs: tauri::State<Mutex<mpsc::Receiver<Log>>>) -> Vec::<Log> {
+    let logs = logs.lock().unwrap();
+    logs.try_recv().into_iter().collect()
 }
 
 #[tauri::command]
@@ -148,35 +140,22 @@ fn get_frozen_spectrum_path(
 fn main() {
     file_reader::test();
 
-    let mut reader = file_reader::new_file_reader("D:\\test".to_string());
+    let (log_tx, log_rx) = mpsc::sync_channel::<Log>(64);
+
+    let mut reader = file_reader::new_file_reader("D:\\test".to_string(), log_tx);
     reader.connect().unwrap();
     reader.read_continuous().unwrap();
 
     let log = Mutex::new(Vec::<Log>::new());
     {
         let mut lock = log.lock().unwrap();
-        (*lock).push(Log {
-            id: 0,
-            msg: "[STR] Started the program".to_string(),
-            log_type: LogType::Info
-        });
+        (*lock).push(new_log("[STR] Started the program".to_string(), LogType::Info));
     };
-
-    // loop {
-    //     sleep(Duration::from_secs(1));
-    //     let unread = reader.unread_spectrum.load(atomic::Ordering::Relaxed);
-    //     println!("-->{}", unread);
-    //     if unread {
-    //         if let Some(specpath) = reader.get_last_spectrum_path((200.0, 200.0)) {
-    //             println!("{}", specpath);
-    //         }
-    //         break;
-    //     }
-    // }
 
     tauri::Builder::default()
         .manage(reader)
         .manage(log)
+        .manage(Mutex::new(log_rx))
         .invoke_handler(tauri::generate_handler![
             hello,
             print_backend,

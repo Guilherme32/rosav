@@ -55,7 +55,7 @@ pub async fn get_svg_size() -> (i32, i32) {
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct Log {
-    pub id: u32,
+    // pub id: u32,
     pub msg: String,
     pub log_type: LogType
 }

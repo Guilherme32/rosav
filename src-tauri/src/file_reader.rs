@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use crate::{ Log, LogType, new_log };
+
 use std::path::Path;
 use notify;
 use notify::{ Watcher, RecursiveMode };
@@ -12,6 +14,7 @@ use std::time::Duration;
 use std::thread::sleep;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{ self, AtomicBool };
+use std::sync::mpsc::SyncSender;
 
 use crate::spectrum::*;
 
@@ -43,6 +46,7 @@ pub struct FileReader {
     pub frozen_spectra: Mutex<Vec<Spectrum>>,
     pub unread_spectrum: Arc<AtomicBool>,
     pub spectrum_limits: Mutex<Option<Limits>>,
+    log_sender: SyncSender<Log>,
     state: ReaderState
 }
 
@@ -124,16 +128,16 @@ impl FileReader {
     pub fn get_last_spectrum_path(&self, svg_limits: (u32, u32)) -> Option<String> {
         let spectrum = match self.last_spectrum.lock() {
             Ok(spectrum) => spectrum,
-            Err(error) => { 
-                println!("[FR] Could not acquire the lock to get last spectrum ({})", error);
+            Err(_) => { 
+                self.log_error("[FGL] Could not acquire the lock to get last spectrum".to_string());
                 return None;
             }
         };
 
         let spec_limits = match self.spectrum_limits.lock() {
             Ok(spec_limits) => spec_limits,
-            Err(error) => { 
-                println!("[FUL] Could not acquire the lock to get last limits ({})", error);
+            Err(_) => { 
+                self.log_error("[FUL] Could not acquire the lock to get last limits".to_string());
                 return None;
             }
         };
@@ -152,16 +156,16 @@ impl FileReader {
     pub fn update_limits(&self) {
         let spectrum = match self.last_spectrum.lock() {
             Ok(spectrum) => spectrum,
-            Err(error) => { 
-                println!("[FUL] Could not acquire the lock to get last spectrum ({})", error);
+            Err(_) => { 
+                self.log_error("[FUL] Could not acquire the lock to get last spectrum".to_string());
                 return ();
             }
         };
 
         let mut limits = match self.spectrum_limits.lock() {
             Ok(limits) => limits,
-            Err(error) => { 
-                println!("[FUL] Could not acquire the lock to get last limits ({})", error);
+            Err(_) => { 
+                self.log_error("[FUL] Could not acquire the lock to get last limits".to_string());
                 return ();
             }
         };
@@ -200,7 +204,7 @@ impl FileReader {
         let mut frozen_list = match self.frozen_spectra.lock() {
             Ok(spectra) => spectra,
             Err(_) => { 
-                self.log("[FFS] Could not acquire the lock to get frozen spectra".to_string());
+                self.log_error("[FFS] Could not acquire the lock to get frozen spectra".to_string());
                 return ();
             }
         };
@@ -208,7 +212,7 @@ impl FileReader {
         let spectrum = match self.last_spectrum.lock() {
             Ok(spectrum) => spectrum,
             Err(_) => { 
-                self.log("[FFS] Could not acquire the lock to get last spectrum".to_string());
+                self.log_error("[FFS] Could not acquire the lock to get last spectrum".to_string());
                 return ();
             }
         };
@@ -216,43 +220,41 @@ impl FileReader {
         match &*spectrum {
             Some(spectrum) => { 
                 frozen_list.push(spectrum.clone());
-                self.log(format!("[FFS] Freezing spectrum ({} frozen)", frozen_list.len()));
+                self.log_info("[FFS] Freezing spectrum".to_string());
             },
-            None => self.log("[FFS] There is no spectrum to freeze".to_string())
+            None => self.log_war("[FFS] No spectrum to freeze".to_string())
         }
     }
 
     pub fn delete_frozen_spectrum(&self, id: usize) {
         let mut frozen_list = match self.frozen_spectra.lock() {
             Ok(spectra) => spectra,
-            Err(error) => { 
-                self.log(format!(
-                    "[FDF] Could not acquire the lock to get frozen spectra ({})",
-                    error));
+            Err(_) => { 
+                self.log_error("[FDF] Could not acquire the lock to get frozen spectra".to_string());
                 return ();
             }
         };
 
         if id >= frozen_list.len() {
-            self.log("[FDF] Could not delete the frozen spectrum, id out of bounds".to_string());
+            self.log_error("[FDF] Could not delete the frozen spectrum, id out of bounds".to_string());
             return ();
         }
 
         frozen_list.remove(id);
-        self.log(format!("[FDF] Deleting frozen spectrum ({} left)", frozen_list.len()));
+        self.log_info(format!("[FDF] Deleting frozen {}", id));
     }
 
     pub fn get_frozen_spectrum_path(&self, id: usize, svg_limits: (u32, u32)) -> Option<String> {
         let frozen_list = match self.frozen_spectra.lock() {
             Ok(spectra) => spectra,
             Err(_) => { 
-                self.log("[FGF] Could not acquire the lock to get frozen spectra".to_string());
+                self.log_error("[FGF] Could not acquire the lock to get frozen spectra".to_string());
                 return None;
             }
         };
 
         if id >= frozen_list.len() {
-            self.log("[FGF] Could not get the frozen spectrum, id out of bounds".to_string());
+            self.log_error("[FGF] Could not get the frozen spectrum, id out of bounds".to_string());
             return None;
         }
 
@@ -261,7 +263,7 @@ impl FileReader {
         let spec_limits = match self.spectrum_limits.lock() {
             Ok(spec_limits) => spec_limits,
             Err(_) => { 
-                self.log("[FGF] Could not acquire the lock to get last limits".to_string());
+                self.log_error("[FGF] Could not acquire the lock to get last limits".to_string());
                 return None;
             }
         };
@@ -273,18 +275,39 @@ impl FileReader {
         }
     }
 
-    fn log(&self, msg: String) {
-        println!("{}", msg);
+    fn log_info(&self, msg: String) {
+        println!("#Info: {}", msg);
+        match self.log_sender.send(new_log(msg, LogType::Info)) {
+            Ok(_) => (),
+            Err(error) => println!("#Exteme error: Error when trying to send info log! ({})", error)
+        }
+    }
+
+    fn log_war(&self, msg: String) {
+        println!("#Warning: {}", msg);
+        match self.log_sender.send(new_log(msg, LogType::Warning)) {
+            Ok(_) => (),
+            Err(error) => println!("#Exteme error: Error when trying to send warning log! ({})", error)
+        }
+    }
+
+    fn log_error(&self, msg: String) {
+        println!("#Error: {}", msg);
+        match self.log_sender.send(new_log(msg, LogType::Error)) {
+            Ok(_) => (),
+            Err(error) => println!("#Exteme error: Error when trying to send error log! ({})", error)
+        }
     }
 }
 
-pub fn new_file_reader(path: String) -> FileReader {
+pub fn new_file_reader(path: String, log_sender: SyncSender<Log>) -> FileReader {
     FileReader {
         path,
         last_spectrum: Arc::new(Mutex::new(None)),
         frozen_spectra: Mutex::new(vec![]),
         unread_spectrum: Arc::new(AtomicBool::new(false)),
         spectrum_limits: Mutex::new(None),
+        log_sender,
         state: ReaderState::Disconnected
     }
 }

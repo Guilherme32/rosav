@@ -485,14 +485,14 @@ fn LogSpace<G:Html>(cx: Scope) -> View<G> {
     let logs = create_signal(cx, Vec::<Log>::with_capacity(30));
 
     spawn_local_scoped(cx, async move {
-        let mut count = 0u32;
+        // let mut count = 0u32;
         loop {
             TimeoutFuture::new(200).await;
             let new_logs = get_last_logs().await;
             for mut new_log in new_logs {
-                new_log.id = count;
+                // new_log.id = count;
                 logs.modify().push(new_log);
-                count += 1;
+                // count += 1;
             }
         }
     });
@@ -501,12 +501,12 @@ fn LogSpace<G:Html>(cx: Scope) -> View<G> {
         div(class="side-bar-log") {
             div(class="title") { "Registro" }
             div(class="log-space back") {
-                Keyed(
+                Indexed(
                     iterable = logs,
                     view = |cx, x| view! { cx,
                         p(class=x.log_type) { (x.msg) }
-                    },
-                    key = |x| (*x).id,
+                    }
+                    // key = |x| (*x).id,
                 )
             }
         }
