@@ -61,17 +61,6 @@ fn get_svg_size(window: tauri::Window) -> (u32, u32) {
      win_size_scaled.1 - 27 - 32)
 }
 
-// #[tauri::command]
-// fn get_last_logs(logs: tauri::State<Mutex<Vec::<Log>>>) -> Vec::<Log> {
-//     let mut logs_lock = logs.lock().unwrap();
-//     let mut new_vec = Vec::<Log>::with_capacity((*logs_lock).len());
-//     while !(*logs_lock).is_empty() {
-//         new_vec.push((*logs_lock).remove(0));
-//     }
-
-//     new_vec
-// }
-
 #[tauri::command]
 fn get_last_logs(logs: tauri::State<Mutex<mpsc::Receiver<Log>>>) -> Vec::<Log> {
     let logs = logs.lock().unwrap();
@@ -138,23 +127,18 @@ fn get_frozen_spectrum_path(
 }
 
 fn main() {
-    file_reader::test();
-
     let (log_tx, log_rx) = mpsc::sync_channel::<Log>(64);
+    match log_tx.send(new_log("[MST] Starting the program".to_string(), LogType::Info)) {
+        Ok(_) => (),
+        Err(error) => println!("#Extreme error: The starting log failed ({})", error)
+    }
 
     let mut reader = file_reader::new_file_reader("D:\\test".to_string(), log_tx);
     reader.connect().unwrap();
     reader.read_continuous().unwrap();
 
-    let log = Mutex::new(Vec::<Log>::new());
-    {
-        let mut lock = log.lock().unwrap();
-        (*lock).push(new_log("[STR] Started the program".to_string(), LogType::Info));
-    };
-
     tauri::Builder::default()
         .manage(reader)
-        .manage(log)
         .manage(Mutex::new(log_rx))
         .invoke_handler(tauri::generate_handler![
             hello,
