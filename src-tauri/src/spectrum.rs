@@ -7,13 +7,13 @@ use serde::Deserialize;
 
 use itertools::Itertools;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct SpectrumValue {
     wavelength: f64,
     power: f64
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Spectrum {
     values: Vec<SpectrumValue>
 }

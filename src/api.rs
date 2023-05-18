@@ -19,6 +19,7 @@ pub async fn hello() {
 struct PrintArgs<'a> {
     msg: &'a str
 }
+
 pub async fn print_backend<'a>(msg: &'a str) {
     invoke("print_backend", to_value(&PrintArgs { msg }).unwrap()).await;
 }
@@ -98,6 +99,26 @@ pub async fn get_power_limits() -> (f64, f64) {
 
 pub async fn get_time() -> String {
     let from_back = invoke("get_time", to_value(&()).unwrap()).await;
+    let obj_rebuilt: String = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}
+
+pub async fn freeze_spectrum() {
+    invoke("freeze_spectrum", to_value(&()).unwrap()).await;
+}
+
+#[derive(Serialize, Deserialize)]
+struct IdArgs {
+    id: usize
+}
+
+pub async fn delete_frozen_spectrum(id: usize) {
+    invoke("delete_frozen_spectrum", to_value(&IdArgs { id } ).unwrap()).await;
+}
+
+pub async fn get_frozen_spectrum_path(id: usize) -> String {
+    let from_back = invoke("get_frozen_spectrum_path", to_value(&IdArgs { id }).unwrap()).await;
     let obj_rebuilt: String = from_value(from_back).unwrap();
 
     obj_rebuilt

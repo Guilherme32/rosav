@@ -41,8 +41,8 @@ fn Main<G:Html>(cx: Scope) -> View<G> {
             }
 
             let new_svg_size = get_svg_size().await;
-            for trace in traces.modify().iter_mut() {                        // Update when the window changes
-                if trace.svg_path.len() == 0 {                        // No old spectrum, no update
+            for (id, trace) in traces.modify().iter_mut().enumerate() {    // Update when the window changes
+                if trace.svg_path.len() == 0 {                             // No old spectrum, no update
                     continue;
                 }
                 if trace.svg_size !=  new_svg_size {
@@ -50,7 +50,7 @@ fn Main<G:Html>(cx: Scope) -> View<G> {
                     if trace.active {
                         trace.svg_path = get_last_spectrum_path().await;
                     } else {
-                        // TODO Get frozen path
+                        trace.svg_path = get_frozen_spectrum_path(id).await;
                     }
                 }
             }
@@ -359,7 +359,7 @@ async fn freeze_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
 
     traces_list.push(new_trace(id+1));
 
-    // TODO mandar congelar no backend tb
+    freeze_spectrum().await;
 }
 
 async fn delete_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
@@ -369,7 +369,7 @@ async fn delete_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
         trace.id = i as u8;
     }
 
-    // TODO mandar deletar no backend tb
+    delete_frozen_spectrum(id as usize).await;
 }
 
 async fn visibility_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {

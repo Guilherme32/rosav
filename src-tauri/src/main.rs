@@ -125,6 +125,26 @@ fn get_power_limits(reader: tauri::State<file_reader::FileReader>) -> (f64, f64)
     }
 }
 
+#[tauri::command]
+fn freeze_spectrum(reader: tauri::State<file_reader::FileReader>) {
+    reader.freeze_spectrum();
+}
+
+#[tauri::command]
+fn delete_frozen_spectrum(id: usize, reader: tauri::State<file_reader::FileReader>) {
+    reader.delete_frozen_spectrum(id);
+}
+
+#[tauri::command]
+fn get_frozen_spectrum_path(
+    id: usize,
+    reader: tauri::State<file_reader::FileReader>,
+    window: tauri::Window
+) -> String {
+    reader.get_frozen_spectrum_path(id, get_svg_size(window))
+        .unwrap_or(String::new())
+}
+
 fn main() {
     file_reader::test();
 
@@ -168,6 +188,9 @@ fn main() {
             get_wavelength_limits,
             get_power_limits,
             get_time,
+            freeze_spectrum,
+            delete_frozen_spectrum,
+            get_frozen_spectrum_path
         ]).run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

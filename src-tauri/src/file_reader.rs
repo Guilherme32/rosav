@@ -40,7 +40,7 @@ enum ReaderState {
 pub struct FileReader {
     pub path: String,
     pub last_spectrum: Arc<Mutex<Option<Spectrum>>>,
-    pub frozen_spectra: Vec<Spectrum>,
+    pub frozen_spectra: Mutex<Vec<Spectrum>>,
     pub unread_spectrum: Arc<AtomicBool>,
     pub spectrum_limits: Mutex<Option<Limits>>,
     state: ReaderState
@@ -196,13 +196,93 @@ impl FileReader {
         }
     }
 
+    pub fn freeze_spectrum(&self) {
+        let mut frozen_list = match self.frozen_spectra.lock() {
+            Ok(spectra) => spectra,
+            Err(_) => { 
+                self.log("[FFS] Could not acquire the lock to get frozen spectra".to_string());
+                return ();
+            }
+        };
+
+        let spectrum = match self.last_spectrum.lock() {
+            Ok(spectrum) => spectrum,
+            Err(_) => { 
+                self.log("[FFS] Could not acquire the lock to get last spectrum".to_string());
+                return ();
+            }
+        };
+
+        match &*spectrum {
+            Some(spectrum) => { 
+                frozen_list.push(spectrum.clone());
+                self.log(format!("[FFS] Freezing spectrum ({} frozen)", frozen_list.len()));
+            },
+            None => self.log("[FFS] There is no spectrum to freeze".to_string())
+        }
+    }
+
+    pub fn delete_frozen_spectrum(&self, id: usize) {
+        let mut frozen_list = match self.frozen_spectra.lock() {
+            Ok(spectra) => spectra,
+            Err(error) => { 
+                self.log(format!(
+                    "[FDF] Could not acquire the lock to get frozen spectra ({})",
+                    error));
+                return ();
+            }
+        };
+
+        if id >= frozen_list.len() {
+            self.log("[FDF] Could not delete the frozen spectrum, id out of bounds".to_string());
+            return ();
+        }
+
+        frozen_list.remove(id);
+        self.log(format!("[FDF] Deleting frozen spectrum ({} left)", frozen_list.len()));
+    }
+
+    pub fn get_frozen_spectrum_path(&self, id: usize, svg_limits: (u32, u32)) -> Option<String> {
+        let frozen_list = match self.frozen_spectra.lock() {
+            Ok(spectra) => spectra,
+            Err(_) => { 
+                self.log("[FGF] Could not acquire the lock to get frozen spectra".to_string());
+                return None;
+            }
+        };
+
+        if id >= frozen_list.len() {
+            self.log("[FGF] Could not get the frozen spectrum, id out of bounds".to_string());
+            return None;
+        }
+
+        let spectrum = &frozen_list[id];
+
+        let spec_limits = match self.spectrum_limits.lock() {
+            Ok(spec_limits) => spec_limits,
+            Err(_) => { 
+                self.log("[FGF] Could not acquire the lock to get last limits".to_string());
+                return None;
+            }
+        };
+
+        if let Some(spec_limits) = &*spec_limits {
+            Some(spectrum.to_path(svg_limits, spec_limits))
+        } else {
+            None
+        }
+    }
+
+    fn log(&self, msg: String) {
+        println!("{}", msg);
+    }
 }
 
 pub fn new_file_reader(path: String) -> FileReader {
     FileReader {
         path,
         last_spectrum: Arc::new(Mutex::new(None)),
-        frozen_spectra: vec![],
+        frozen_spectra: Mutex::new(vec![]),
         unread_spectrum: Arc::new(AtomicBool::new(false)),
         spectrum_limits: Mutex::new(None),
         state: ReaderState::Disconnected
