@@ -3,12 +3,14 @@
     windows_subsystem = "windows"
 )]
 
-use app::{ file_reader, Log, LogType, new_log };
+use app::*;
 // use std::thread::sleep;
 // use std::time::Duration;
 // use serde::{Serialize, Deserialize};
 use std::sync::{ atomic, Mutex, mpsc };
 use chrono::prelude::*;
+
+use tauri::api::dialog::FileDialogBuilder;
 
 
 #[tauri::command]
@@ -126,6 +128,42 @@ fn get_frozen_spectrum_path(
         .unwrap_or(String::new())
 }
 
+#[tauri::command]
+fn save_frozen_spectrum(
+    id: usize,
+    reader: tauri::State<file_reader::FileReader>,
+    window: tauri::Window
+) {
+    let spectrum = reader.clone_frozen(id);
+    if let Some(spectrum) = spectrum {
+        let log_tx = reader.log_sender.clone();
+
+        FileDialogBuilder::new()
+            .add_filter("text", &["txt", ])
+            .set_file_name("spectrum")
+            .set_parent(&window)
+            .save_file(move |path| {
+                if let Some(path) = path {
+                    return match spectrum.save(&path) {
+                        Ok(_) => log_info(&log_tx, format!("[MSF] Spectrum {} saved", id)),
+                        Err(error) => log_error(&log_tx, 
+                            format!("[MSF] Failed to save spectrum {} ({})", id, error))
+                    };
+                }
+            });
+    }
+}
+
+#[tauri::command]
+fn save_continuous(save: bool, reader:tauri::State<file_reader::FileReader>) {
+    reader.saving_new.store(save, atomic::Ordering::Relaxed);
+}
+
+#[tauri::command]
+fn get_saving(reader:tauri::State<file_reader::FileReader>) -> bool {
+    reader.saving_new.load(atomic::Ordering::Relaxed)
+}
+
 fn main() {
     let (log_tx, log_rx) = mpsc::sync_channel::<Log>(64);
     match log_tx.send(new_log("[MST] Starting the program".to_string(), LogType::Info)) {
@@ -153,7 +191,10 @@ fn main() {
             get_time,
             freeze_spectrum,
             delete_frozen_spectrum,
-            get_frozen_spectrum_path
+            get_frozen_spectrum_path,
+            save_frozen_spectrum,
+            save_continuous,
+            get_saving
         ]).run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

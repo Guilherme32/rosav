@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 
-use crate::{ Log, LogType, new_log };
+use crate::{ Log, log_info, log_error, log_war };
 
 use std::path::Path;
 use notify;
 use notify::{ Watcher, RecursiveMode };
-use std::fs::File;
+use std::fs::{ self, File };
 use std::io::Read;
 use std::io;
 use std::error::Error;
@@ -46,7 +46,8 @@ pub struct FileReader {
     pub frozen_spectra: Mutex<Vec<Spectrum>>,
     pub unread_spectrum: Arc<AtomicBool>,
     pub spectrum_limits: Mutex<Option<Limits>>,
-    log_sender: SyncSender<Log>,
+    pub log_sender: SyncSender<Log>,
+    pub saving_new: Arc<AtomicBool>,
     state: ReaderState
 }
 
@@ -104,10 +105,15 @@ impl FileReader {
 
         let spectrum_reference = Arc::clone(&self.last_spectrum);
         let flag_reference = Arc::clone(&self.unread_spectrum);
+        let saving_reference = Arc::clone(&self.saving_new);
+        let log_sender_clone = Arc::new(self.log_sender.clone());
+
         let callback = move |event| watcher_callback(
             event,
             Arc::clone(&spectrum_reference),
-            Arc::clone(&flag_reference)
+            Arc::clone(&flag_reference),
+            Arc::clone(&saving_reference),
+            Arc::clone(&log_sender_clone)
         );
 
         let mut watcher = match notify::recommended_watcher(callback) {
@@ -275,28 +281,56 @@ impl FileReader {
         }
     }
 
-    fn log_info(&self, msg: String) {
-        println!("#Info: {}", msg);
-        match self.log_sender.send(new_log(msg, LogType::Info)) {
-            Ok(_) => (),
-            Err(error) => println!("#Exteme error: Error when trying to send info log! ({})", error)
+    pub fn clone_frozen(&self, id: usize) -> Option<Spectrum> {
+        let frozen_list = match self.frozen_spectra.lock() {
+            Ok(spectra) => spectra,
+            Err(_) => { 
+                self.log_error("[FCF] Could not acquire the lock to get frozen spectra".to_string());
+                return None;
+            }
+        };
+
+        if id >= frozen_list.len() {
+            self.log_error("[FCF] Could not get the frozen spectrum, id out of bounds".to_string());
+            return None;
         }
+
+        let spectrum = &frozen_list[id];
+        Some(spectrum.clone())
+    }
+
+    pub fn save_frozen(&self, id: usize, path: &Path) {
+        let frozen_list = match self.frozen_spectra.lock() {
+            Ok(spectra) => spectra,
+            Err(_) => { 
+                self.log_error("[FSF] Could not acquire the lock to get frozen spectra".to_string());
+                return ();
+            }
+        };
+
+        if id >= frozen_list.len() {
+            self.log_error("[FSF] Could not get the frozen spectrum, id out of bounds".to_string());
+            return ();
+        }
+
+        let spectrum = &frozen_list[id];
+
+        match spectrum.save(path) {
+            Ok(_) => self.log_info(format!("[FSF] Spectrum {} saved", id)),
+            Err(error) => self.log_error(format!("[FSF] Failed to save spectrum {} ({})", id, error))
+        }
+    } 
+
+    fn log_info(&self, msg: String) {
+        log_info(&self.log_sender, msg);
     }
 
     fn log_war(&self, msg: String) {
-        println!("#Warning: {}", msg);
-        match self.log_sender.send(new_log(msg, LogType::Warning)) {
-            Ok(_) => (),
-            Err(error) => println!("#Exteme error: Error when trying to send warning log! ({})", error)
-        }
+        log_war(&self.log_sender, msg);
     }
 
     fn log_error(&self, msg: String) {
-        println!("#Error: {}", msg);
-        match self.log_sender.send(new_log(msg, LogType::Error)) {
-            Ok(_) => (),
-            Err(error) => println!("#Exteme error: Error when trying to send error log! ({})", error)
-        }
+        log_error(&self.log_sender, msg);
     }
 }
 
@@ -308,6 +342,7 @@ pub fn new_file_reader(path: String, log_sender: SyncSender<Log>) -> FileReader 
         unread_spectrum: Arc::new(AtomicBool::new(false)),
         spectrum_limits: Mutex::new(None),
         log_sender,
+        saving_new: Arc::new(AtomicBool::new(false)),
         state: ReaderState::Disconnected
     }
 }
@@ -338,34 +373,59 @@ fn read_file_event(event: &notify::Event) -> Result<String, Box<dyn Error>> {
 fn watcher_callback<T: std::fmt::Debug>(
     response: Result<notify::Event, T>,
     last_spectrum: Arc<Mutex<Option<Spectrum>>>,
-    new_spectrum: Arc<AtomicBool>
+    new_spectrum: Arc<AtomicBool>,
+    saving: Arc<AtomicBool>,
+    log_tx: Arc<SyncSender<Log>>
 ) {
     let event = match response {
         Ok(event) if event.kind.is_create() => event,
         Ok(_) => return,                    // Don't care about successfull non create events
-        Err(error) => return println!("[FR] watch error: {:?}", error)
+        Err(error) => return log_error(&log_tx, format!("[FR] watch error: {:?}", error))
     };
 
     let text = match read_file_event(&event) {
         Ok(text) => text,
-        Err(error) => return println!(
+        Err(error) => return log_error(&log_tx, format!(
             "[FR] Could not react to the create file event: {:?},\
             \nError: {}",
-            event, error)
+            event, error))
     };
 
     let spectrum = match Spectrum::from_str(&text) {
         Ok(spectrum) => spectrum,
-        Err(error) => return println!("[FR] Could not transform the file\
-            into a spectrum ({})", error)
+        Err(error) => return log_error(&log_tx, format!("[FR] Could not\
+            transform the file into a spectrum ({})", error))
     };
+
+    if saving.load(atomic::Ordering::Relaxed) {
+        match auto_save_spectrum(&spectrum) {
+            Ok(num) => log_info(&log_tx, format!("[FWC] Saved new spectrum {:03}", num)),
+            Err(error) => log_error(&log_tx, format!("[FWC] Could not save new spectrum ({})", error))
+        }
+    }
 
     match last_spectrum.lock() {
         Ok(mut last_spectrum) => {
             *last_spectrum = Some(spectrum);
             new_spectrum.store(true, atomic::Ordering::Relaxed);
         },
-        Err(error) => println!("[FR] Could not acquire the spectrum lock ({})", error)
+        Err(error) => log_error(&log_tx, format!("[FR] Could not acquire the spectrum lock ({})", error))
     };
+}
+
+fn auto_save_spectrum(spectrum: &Spectrum) -> Result<u32, Box<dyn Error>> {
+    let folder_path = Path::new("C:\\Users\\guilh\\Desktop\\Coisas\\temp\\spectra");    // TODO send to config
+    fs::create_dir_all(folder_path)?;
+
+    for i in 0..100_000 {
+        let new_path = folder_path.join(format!("spectrum{:03}.txt", i));
+        if !new_path.exists() {
+            spectrum.save(&new_path)?;
+            return Ok(i);
+        }
+    } 
+
+    Err(Box::new(io::Error::new(io::ErrorKind::Other, "Spectrum overflow,\
+        can only save up to spectrum99999")))
 }
 

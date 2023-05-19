@@ -3,11 +3,12 @@
 use std::error::Error;
 use std::fmt;
 use csv;
-use serde::Deserialize;
+use serde::{ Deserialize, Serialize };
+use std::path::Path;
 
 use itertools::Itertools;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct SpectrumValue {
     wavelength: f64,
     power: f64
@@ -139,6 +140,22 @@ impl Spectrum {
         Limits {
             wavelength: (wl_min, wl_max),
             power: (pwr_min - 3.0, pwr_max + 3.0)
+        }
+    }
+
+    pub fn save(&self, path: &Path) -> Result<(), Box<dyn Error>> {
+        let mut writer = csv::WriterBuilder::new()
+            .has_headers(false)
+            .delimiter(b';')
+            .from_path(path)?;
+
+        let result = self.values.iter()
+            .map(|entry| writer.serialize(entry))
+            .collect::<Result<Vec<()>, csv::Error>>();
+
+        match result {
+            Ok(_) => Ok(()),
+            Err(error) => Err(Box::new(error))
         }
     }
 }

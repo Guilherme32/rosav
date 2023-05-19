@@ -58,9 +58,11 @@ fn Main<G:Html>(cx: Scope) -> View<G> {
         }
     });
 
+    let saving_new = create_signal(cx, false);
+
     view!{ cx,
         div(class="horizontal-container") {
-            SideBar(traces=traces)
+            SideBar(traces=traces, saving=saving_new)
             div(class="vertical-container") {
                 Graph(traces=traces, svg_size=svg_size)
                 LowerBar {}
@@ -77,64 +79,34 @@ struct GraphProps<'a> {
 
 #[component]
 fn Graph<'a, G:Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
-    // let is_ready = create_signal(cx, false);
-    // let path = create_signal(cx, String::new());
-    // let svg_size = create_signal(cx, (0i32, 0i32));
-
-    // spawn_local_scoped(cx, async move {
-    //     loop {
-    //         TimeoutFuture::new(200).await;
-    //         if unread_spectrum().await {
-    //             if let Some(spectrum_path) = get_last_spectrum_path().await {
-    //                 path.set(spectrum_path);
-    //             }
-    //         }
-    //         is_ready.set(unread_spectrum().await);
-
-    //         svg_size.set(get_svg_size().await);
-    //     }
-    // });
-
     view! { cx,
         div(class="graph-space back") {
-            (if false {//(*path.get()).len() == 0 {
-                view! { cx,
-                    div(class="placeholder") {
-                        p { "Área do gráfico" }
-                        p { "Sem espectro para mostrar" }
-                    }
+            svg(
+                width=props.svg_size.get().0,
+                height=props.svg_size.get().1)
+            {
+                GraphFrame(svg_size=props.svg_size)
+                clipPath(id="graph-clip") {
+                    rect(
+                        width=(props.svg_size.get().0 - 44),
+                        height=(props.svg_size.get().1 - 20), 
+                        x="2", y="2") {}
                 }
-            } else {
-                    view! { cx,
-                        svg(
-                            width=props.svg_size.get().0,
-                            height=props.svg_size.get().1)
-                        {
-                            GraphFrame(svg_size=props.svg_size)
-                            clipPath(id="graph-clip") {
-                                rect(
-                                    width=(props.svg_size.get().0 - 44),
-                                    height=(props.svg_size.get().1 - 20), 
-                                    x="2", y="2") {}
-                            }
-                            Indexed(
-                                iterable=props.traces,
-                                view = |cx, trace| if trace.visible { 
-                                    view! { cx,
-                                        path(
-                                            d=trace.svg_path,
-                                            fill="none",
-                                            stroke-width="2",
-                                            stroke=trace_id_to_color(trace.id),
-                                            clip-path="url(#graph-clip)"
-                                            ) {}
-                                    } 
-                                } else { view! { cx, "" } }
-                            )
-                        }
-                    }
-                }
-            )
+                Indexed(
+                    iterable=props.traces,
+                    view = |cx, trace| if trace.visible { 
+                        view! { cx,
+                            path(
+                                d=trace.svg_path,
+                                fill="none",
+                                stroke-width="2",
+                                stroke=trace_id_to_color(trace.id),
+                                clip-path="url(#graph-clip)"
+                                ) {}
+                        } 
+                    } else { view! { cx, "" } }
+                )
+            }
         }
     }
 }
@@ -163,7 +135,7 @@ fn GraphFrame<'a, G:Html>(cx: Scope<'a>, props: FrameProps<'a>) -> View<G> {
 
     let n_divs = create_memo(cx, || 
        ((*graph_size.get()).0 / 100 + 1,
-        (*graph_size.get()).1 / 50 + 1) 
+        (*graph_size.get()).1 / 62 + 1) 
     );
 
     let divs_x = create_memo(cx, ||
@@ -327,14 +299,15 @@ fn LowerBar<G:Html>(cx: Scope) -> View<G> {
 
 #[derive(Prop)]
 struct SideBarProps<'a> {
-    traces: &'a Signal<Vec<Trace>>
+    traces: &'a Signal<Vec<Trace>>,
+    saving: &'a Signal<bool>
 }
 
 #[component]
 fn SideBar<'a, G:Html>(cx: Scope<'a>, props: SideBarProps<'a>) -> View<G> {
     view! { cx,
         div(class="side-bar") {
-            SideBarMain(traces=props.traces)
+            SideBarMain(traces=props.traces, saving=props.saving)
             LogSpace {}
         }
     }
@@ -343,7 +316,8 @@ fn SideBar<'a, G:Html>(cx: Scope<'a>, props: SideBarProps<'a>) -> View<G> {
 #[derive(Prop)]
 struct RenderTraceProps<'a> {
     trace: Trace,
-    traces_list: &'a Signal<Vec<Trace>>
+    traces_list: &'a Signal<Vec<Trace>>,
+    saving: &'a Signal<bool>
 }
 
 async fn freeze_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
@@ -377,10 +351,13 @@ async fn visibility_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
     trace.visible = !trace.visible;
 }
 
-async fn save_callback<'a>(_id: u8, _traces_list: &'a Signal<Vec<Trace>>) {
-    print_backend(&format!("{:?}", _traces_list)).await;
-    hello().await;
-    // TODO mandar salvar o espectro pelo backend
+async fn save_frozen_callback<'a>(id: u8, _traces_list: &'a Signal<Vec<Trace>>) {
+    save_frozen_spectrum(id as usize).await;
+}
+
+async fn save_continuous_callback<'a>(saving: &'a Signal<bool>) {
+    save_continuous(!*saving.get()).await;
+    saving.set(get_saving().await);
 }
 
 async fn draw_valleys_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
@@ -405,9 +382,14 @@ fn RenderTrace<'a, G:Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<G
             visibility_callback(props.trace.id, props.traces_list).await;
         })
     };
-    let save = move |_| {
+    let save_frozen = move |_| {
         spawn_local_scoped(cx, async move {
-            save_callback(props.trace.id, props.traces_list).await;
+            save_frozen_callback(props.trace.id, props.traces_list).await;
+        })
+    };
+    let save_continuous = move |_| {
+        spawn_local_scoped(cx, async move {
+            save_continuous_callback(props.saving).await;
         })
     };
     let draw_valleys = move |_| {
@@ -432,12 +414,23 @@ fn RenderTrace<'a, G:Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<G
                     true => view! { cx, button(on:click=freeze) { " " } },
                     false => view! { cx, button(on:click=delete) { "󰜺 " } }
                 })
+
                 (if props.trace.visible {
                     view! { cx, button(on:click=visibility) { " " } }
                 } else {
                     view! { cx, button(on:click=visibility) { " " } }
                 })
-                button(on:click=save) { " " }
+
+                (if props.trace.active {
+                    if *props.saving.get() {
+                        view! { cx, button(on:click=save_continuous) { "󱧹 " } }
+                    } else {
+                        view! { cx, button(on:click=save_continuous) { "󱃩 " } }
+                    }
+                } else {
+                    view! { cx, button(on:click=save_frozen) { " " } }
+                })
+
                 (if props.trace.draw_valleys {
                     view! { cx, button(on:click=draw_valleys) { "󰽅 " } }
                 } else {
@@ -450,7 +443,8 @@ fn RenderTrace<'a, G:Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<G
 
 #[derive(Prop)]
 struct SideBarMainProps<'a> {
-    traces: &'a Signal<Vec<Trace>>
+    traces: &'a Signal<Vec<Trace>>,
+    saving: &'a Signal<bool>
 }
 
 #[component]
@@ -472,7 +466,7 @@ fn SideBarMain<'a, G:Html>(cx: Scope<'a>, props: SideBarMainProps<'a>) -> View<G
                 Indexed(
                     iterable = props.traces,
                     view = move |cx, trace| view! { 
-                        cx, RenderTrace(trace=trace, traces_list=&props.traces)
+                        cx, RenderTrace(trace=trace, traces_list=&props.traces, saving=&props.saving)
                     }
                 )
             }
@@ -489,7 +483,7 @@ fn LogSpace<G:Html>(cx: Scope) -> View<G> {
         loop {
             TimeoutFuture::new(200).await;
             let new_logs = get_last_logs().await;
-            for mut new_log in new_logs {
+            for new_log in new_logs {
                 // new_log.id = count;
                 logs.modify().push(new_log);
                 // count += 1;

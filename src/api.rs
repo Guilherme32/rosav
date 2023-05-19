@@ -124,3 +124,24 @@ pub async fn get_frozen_spectrum_path(id: usize) -> String {
     obj_rebuilt
 }
 
+pub async fn save_frozen_spectrum(id: usize) {
+    invoke("save_frozen_spectrum", to_value(&IdArgs { id } ).unwrap()).await;
+}
+
+#[derive(Serialize, Deserialize)]
+struct SaveContinuousArgs {
+    save: bool
+}
+
+pub async fn save_continuous(save: bool) {
+    invoke("save_continuous", to_value(&SaveContinuousArgs { save } ).unwrap()).await;
+}
+
+pub async fn get_saving() -> bool {
+    let from_back = invoke("get_saving", to_value(&()).unwrap()).await;
+    let obj_rebuilt: bool = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}
+
+
