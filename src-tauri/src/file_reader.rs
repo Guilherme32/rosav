@@ -48,11 +48,12 @@ pub struct FileReader {
     pub spectrum_limits: Mutex<Option<Limits>>,
     pub log_sender: SyncSender<Log>,
     pub saving_new: Arc<AtomicBool>,
-    state: ReaderState
+    state: Arc<Mutex<ReaderState>>
 }
 
 #[derive(Debug)]
 pub enum ConnectError {
+    LockFailed,
     ReaderAlreadyConnected,
     PathDoesNotExist,
     PathIsNotDir,
@@ -61,15 +62,24 @@ pub enum ConnectError {
 
 #[derive(Debug)]
 pub enum ContinuousError {
+    LockFailed,
     ReaderNotConnected,
     ReaderAlreadyContinuous,
     NotifyInternalError
 }
 
 impl FileReader {
-    pub fn connect<'a>(&'a mut self) -> Result<&'a mut Self, ConnectError>
+    pub fn connect<'a>(&'a mut self) -> Result<(), ConnectError>
     {
-        match self.state {
+        let mut state = match self.state.lock() {
+            Ok(state) => state,
+            Err(_) => {
+                self.log_error("[FCN] Failed to acquire state lock".to_string());
+                return Err(ConnectError::LockFailed)
+            }
+        };
+
+        match *state {
             ReaderState::Disconnected => (),
             _ => return Err(ConnectError::ReaderAlreadyConnected)
         }
@@ -89,13 +99,22 @@ impl FileReader {
             return Err(ConnectError::PathIsNotDir);
         }
 
-        self.state = ReaderState::Connected;
-        Ok(self)
+        *state = ReaderState::Connected;
+        self.log_info("[FCN] Acquisition backend OK".to_string());
+        Ok(())
     }
 
-    pub fn read_continuous<'a>(&'a mut self) -> Result<&'a mut Self, ContinuousError>
+    pub fn read_continuous<'a>(&'a mut self) -> Result<(), ContinuousError>
     {
-        match self.state {
+        let mut state = match self.state.lock() {
+            Ok(state) => state,
+            Err(_) => {
+                self.log_error("[FRC] Failed to acquire state lock".to_string());
+                return Err(ContinuousError::LockFailed)
+            }
+        };
+
+        match *state {
             ReaderState::Disconnected => return Err(ContinuousError::ReaderNotConnected),
             ReaderState::Reading(_) => return Err(ContinuousError::ReaderAlreadyContinuous),
             _ => ()
@@ -126,8 +145,9 @@ impl FileReader {
             Err(_) => return Err(ContinuousError::NotifyInternalError)
         }
 
-        self.state = ReaderState::Reading(watcher);
-        Ok(self)
+        *state = ReaderState::Reading(watcher);
+        self.log_info("[FRC] Reading continuously".to_string());
+        Ok(())
     }
 
 
@@ -343,7 +363,7 @@ pub fn new_file_reader(path: String, log_sender: SyncSender<Log>) -> FileReader 
         spectrum_limits: Mutex::new(None),
         log_sender,
         saving_new: Arc::new(AtomicBool::new(false)),
-        state: ReaderState::Disconnected
+        state: Arc::new(Mutex::new(ReaderState::Disconnected))
     }
 }
 
@@ -393,7 +413,7 @@ fn watcher_callback<T: std::fmt::Debug>(
 
     let spectrum = match Spectrum::from_str(&text) {
         Ok(spectrum) => spectrum,
-        Err(error) => return log_error(&log_tx, format!("[FR] Could not\
+        Err(error) => return log_error(&log_tx, format!("[FR] Could not \
             transform the file into a spectrum ({})", error))
     };
 
