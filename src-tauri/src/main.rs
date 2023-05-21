@@ -223,7 +223,12 @@ fn main() {
     let (log_tx, log_rx) = mpsc::sync_channel::<Log>(64);
     log_info(&log_tx, "[MST] Starting the program".to_string());
 
-    let reader = file_reader::new_file_reader("D:\\test".to_string(), log_tx);
+    let config = file_reader::FileReaderConfig {
+        watcher_path: "D:\\test\\read".to_string(),
+        auto_save_path: "D:\\test\\save".to_string()
+    };
+
+    let reader = file_reader::new_file_reader(config, log_tx);
 
     tauri::Builder::default()
         .manage(reader)

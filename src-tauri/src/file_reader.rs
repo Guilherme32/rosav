@@ -16,6 +16,8 @@ use std::sync::{Arc, Mutex};
 use std::sync::atomic::{ self, AtomicBool };
 use std::sync::mpsc::SyncSender;
 
+use serde::{Serialize, Deserialize};
+
 use crate::spectrum::*;
 
 pub fn test() {
@@ -32,6 +34,12 @@ pub fn test() {
 //     watcher: notify::RecommendedWatcher
 // }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FileReaderConfig {
+    pub auto_save_path: String,
+    pub watcher_path: String
+}
+
 #[derive(Debug)]
 pub enum ReaderState {
     Disconnected,
@@ -41,7 +49,7 @@ pub enum ReaderState {
 
 #[derive(Debug)]
 pub struct FileReader {
-    pub path: String,
+    pub config: Mutex<FileReaderConfig>,
     pub last_spectrum: Arc<Mutex<Option<Spectrum>>>,
     pub frozen_spectra: Mutex<Vec<Spectrum>>,
     pub unread_spectrum: Arc<AtomicBool>,
@@ -88,7 +96,14 @@ impl FileReader {
             }
         }
 
-        let path = Path::new(&self.path);
+        let config = match self.config.lock() {
+            Ok(config) => config,
+            Err(_) => {
+                self.log_error("[FCN] Failed to acquire config lock".to_string());
+                return Err(ConnectError::LockFailed)
+            }
+        };
+        let path = Path::new(&config.watcher_path);
 
         match path.try_exists() {
             Err(_) => { 
@@ -156,7 +171,15 @@ impl FileReader {
             _ => ()
         }
 
-        let path = Path::new(&self.path);
+        let config = match self.config.lock() {
+            Ok(config) => config,
+            Err(_) => {
+                self.log_error("[FSR] Failed to acquire config lock".to_string());
+                return Err(ContinuousError::LockFailed)
+            }
+        };
+        let watcher_path = Path::new(&config.watcher_path);
+        let auto_save_path = config.auto_save_path.clone();
 
         let spectrum_reference = Arc::clone(&self.last_spectrum);
         let flag_reference = Arc::clone(&self.unread_spectrum);
@@ -169,10 +192,11 @@ impl FileReader {
             Arc::clone(&spectrum_reference),
             Arc::clone(&flag_reference),
             Arc::clone(&saving_reference),
+            &auto_save_path,
             Arc::clone(&log_sender_clone)
         ) {
             Ok(_) => (),
-            Err(_) => {                // TODO logar a desconexão
+            Err(_) => {
                 if let Ok(mut state) = state_reference.lock() {
                     *state = ReaderState::Disconnected;
                     log_war(&log_sender_clone, "[FSR] Acquisition backend \
@@ -187,7 +211,7 @@ impl FileReader {
             Err(_) => return Err(ContinuousError::NotifyInternalError)
         };
 
-        match watcher.watch(path, RecursiveMode::NonRecursive) {
+        match watcher.watch(watcher_path, RecursiveMode::NonRecursive) {
             Ok(_) => (),
             Err(_) => return Err(ContinuousError::NotifyInternalError)
         }
@@ -425,9 +449,9 @@ impl FileReader {
     }
 }
 
-pub fn new_file_reader(path: String, log_sender: SyncSender<Log>) -> FileReader {
+pub fn new_file_reader(config: FileReaderConfig, log_sender: SyncSender<Log>) -> FileReader {
     FileReader {
-        path,
+        config: Mutex::new(config),
         last_spectrum: Arc::new(Mutex::new(None)),
         frozen_spectra: Mutex::new(vec![]),
         unread_spectrum: Arc::new(AtomicBool::new(false)),
@@ -466,6 +490,7 @@ fn watcher_callback<T: std::fmt::Debug>(
     last_spectrum: Arc<Mutex<Option<Spectrum>>>,
     new_spectrum: Arc<AtomicBool>,
     saving: Arc<AtomicBool>,
+    auto_save_path: &str,
     log_tx: Arc<SyncSender<Log>>
 ) -> Result<(), ()> {
     let event = match response {
@@ -496,7 +521,7 @@ fn watcher_callback<T: std::fmt::Debug>(
     };
 
     if saving.load(atomic::Ordering::Relaxed) {
-        match auto_save_spectrum(&spectrum) {
+        match auto_save_spectrum(&spectrum, auto_save_path) {
             Ok(num) => log_info(&log_tx, format!("[FWC] Saved new spectrum {:03}", num)),
             Err(error) => log_error(&log_tx, format!("[FWC] Could not save new spectrum ({})", error))
         }
@@ -516,8 +541,8 @@ fn watcher_callback<T: std::fmt::Debug>(
     Ok(())
 }
 
-fn auto_save_spectrum(spectrum: &Spectrum) -> Result<u32, Box<dyn Error>> {
-    let folder_path = Path::new("C:\\Users\\guilh\\Desktop\\Coisas\\temp\\spectra");    // TODO send to config
+fn auto_save_spectrum(spectrum: &Spectrum, folder_path: &str) -> Result<u32, Box<dyn Error>> {
+    let folder_path = Path::new(folder_path);
     fs::create_dir_all(folder_path)?;
 
     for i in 0..100_000 {
