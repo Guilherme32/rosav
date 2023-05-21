@@ -33,7 +33,7 @@ pub fn test() {
 // }
 
 #[derive(Debug)]
-enum ReaderState {
+pub enum ReaderState {
     Disconnected,
     Connected,
     Reading (notify::RecommendedWatcher)
@@ -48,7 +48,7 @@ pub struct FileReader {
     pub spectrum_limits: Mutex<Option<Limits>>,
     pub log_sender: SyncSender<Log>,
     pub saving_new: Arc<AtomicBool>,
-    state: Arc<Mutex<ReaderState>>
+    pub state: Arc<Mutex<ReaderState>>
 }
 
 #[derive(Debug)]
@@ -69,7 +69,7 @@ pub enum ContinuousError {
 }
 
 impl FileReader {
-    pub fn connect<'a>(&'a mut self) -> Result<(), ConnectError>
+    pub fn connect<'a>(&'a self) -> Result<(), ConnectError>
     {
         let mut state = match self.state.lock() {
             Ok(state) => state,
@@ -81,35 +81,71 @@ impl FileReader {
 
         match *state {
             ReaderState::Disconnected => (),
-            _ => return Err(ConnectError::ReaderAlreadyConnected)
+            _ => {
+                self.log_war("[FCN] Could not connect: the acquisitor is \
+                    already connected".to_string());
+                return Err(ConnectError::ReaderAlreadyConnected);
+            }
         }
 
         let path = Path::new(&self.path);
 
         match path.try_exists() {
-            Err(_) => { return Err(ConnectError::PathWithoutPermission) },
+            Err(_) => { 
+                self.log_war("[FCN] Could not connect: the permission to \
+                    the path was denied".to_string());
+                return Err(ConnectError::PathWithoutPermission);
+            },
             Ok(exists) => {
                 if !exists {
-                    return Err(ConnectError::PathDoesNotExist)
+                    self.log_war("[FCN] Could not connect: the configured \
+                        path does not exist".to_string());
+                    return Err(ConnectError::PathDoesNotExist);
                 }
             }
         }
 
         if !path.is_dir() {
+            self.log_war("[FCN] Could not connect: the configured \
+                path is not a directory".to_string());
             return Err(ConnectError::PathIsNotDir);
         }
 
         *state = ReaderState::Connected;
-        self.log_info("[FCN] Acquisition backend OK".to_string());
+        self.log_info("[FCN] Acquisitor connected".to_string());
         Ok(())
     }
 
-    pub fn read_continuous<'a>(&'a mut self) -> Result<(), ContinuousError>
+    pub fn disconnect<'a>(&'a self) -> Result<(), &'static str>
     {
         let mut state = match self.state.lock() {
             Ok(state) => state,
             Err(_) => {
-                self.log_error("[FRC] Failed to acquire state lock".to_string());
+                self.log_error("[FDN] Failed to acquire state lock".to_string());
+                return Err("Lock acquisition failed");
+            }
+        };
+
+        match *state {
+            ReaderState::Disconnected => {
+                self.log_war("[FDN] Could not disconnect: the acquisitor is \
+                    already disconnected".to_string());
+                return Err("Already disconnected");
+            },
+            _ => ()
+        }
+
+        *state = ReaderState::Disconnected;
+        self.log_info("[FDN] Acquisitor disconnected".to_string());
+        Ok(())
+    }
+
+    pub fn start_reading<'a>(&'a self) -> Result<(), ContinuousError>
+    {
+        let mut state = match self.state.lock() {
+            Ok(state) => state,
+            Err(_) => {
+                self.log_error("[FSR] Failed to acquire state lock".to_string());
                 return Err(ContinuousError::LockFailed)
             }
         };
@@ -126,14 +162,25 @@ impl FileReader {
         let flag_reference = Arc::clone(&self.unread_spectrum);
         let saving_reference = Arc::clone(&self.saving_new);
         let log_sender_clone = Arc::new(self.log_sender.clone());
+        let state_reference = Arc::clone(&self.state);
 
-        let callback = move |event| watcher_callback(
+        let callback = move |event| match watcher_callback(
             event,
             Arc::clone(&spectrum_reference),
             Arc::clone(&flag_reference),
             Arc::clone(&saving_reference),
             Arc::clone(&log_sender_clone)
-        );
+        ) {
+            Ok(_) => (),
+            Err(_) => {                // TODO logar a desconexão
+                if let Ok(mut state) = state_reference.lock() {
+                    *state = ReaderState::Disconnected;
+                    log_war(&log_sender_clone, "[FSR] Acquisition backend \
+                        disconnected due to an error".to_string());
+                }
+                ()
+            }
+        };
 
         let mut watcher = match notify::recommended_watcher(callback) {
             Ok(_watcher) => _watcher,
@@ -146,7 +193,31 @@ impl FileReader {
         }
 
         *state = ReaderState::Reading(watcher);
-        self.log_info("[FRC] Reading continuously".to_string());
+        self.log_info("[FSR] Acquisitor reading".to_string());
+        Ok(())
+    }
+
+    pub fn stop_reading<'a>(&'a self) -> Result<(), &'static str>
+    {
+        let mut state = match self.state.lock() {
+            Ok(state) => state,
+            Err(_) => {
+                self.log_error("[FTP] Failed to acquire state lock".to_string());
+                return Err("Lock acquisition failed");
+            }
+        };
+
+        match *state {
+            ReaderState::Reading(_) => (),
+            _ => {
+                self.log_war("[FTP] Could not stop reading: the acquisitor \
+                    was not reading".to_string());
+                return Err("Invalid State: Not reading");
+            }
+        }
+
+        *state = ReaderState::Connected;
+        self.log_info("[FTP] Acq. stopped reading".to_string());
         Ok(())
     }
 
@@ -341,15 +412,15 @@ impl FileReader {
         }
     } 
 
-    fn log_info(&self, msg: String) {
+    pub fn log_info(&self, msg: String) {
         log_info(&self.log_sender, msg);
     }
 
-    fn log_war(&self, msg: String) {
+    pub fn log_war(&self, msg: String) {
         log_war(&self.log_sender, msg);
     }
 
-    fn log_error(&self, msg: String) {
+    pub fn log_error(&self, msg: String) {
         log_error(&self.log_sender, msg);
     }
 }
@@ -396,25 +467,32 @@ fn watcher_callback<T: std::fmt::Debug>(
     new_spectrum: Arc<AtomicBool>,
     saving: Arc<AtomicBool>,
     log_tx: Arc<SyncSender<Log>>
-) {
+) -> Result<(), ()> {
     let event = match response {
         Ok(event) if event.kind.is_create() => event,
-        Ok(_) => return,                    // Don't care about successfull non create events
-        Err(error) => return log_error(&log_tx, format!("[FR] watch error: {:?}", error))
+        Ok(_) => return Ok(()),                                // Don't care about successfull non create events
+        Err(error) => {
+            log_error(&log_tx, format!("[FWC] watch error: {:?}", error));
+            return Err(());
+        }
     };
 
     let text = match read_file_event(&event) {
         Ok(text) => text,
-        Err(error) => return log_error(&log_tx, format!(
-            "[FR] Could not react to the create file event: {:?},\
-            \nError: {}",
-            event, error))
+        Err(error) => {
+            log_error(&log_tx, format!("[FWC] Could not react to the create \
+                file event: {:?}, \nError: {}", event, error));
+            return Err(());
+        }
     };
 
     let spectrum = match Spectrum::from_str(&text) {
         Ok(spectrum) => spectrum,
-        Err(error) => return log_error(&log_tx, format!("[FR] Could not \
-            transform the file into a spectrum ({})", error))
+        Err(error) => {
+            log_error(&log_tx, format!("[FWC] Could not transform the file into \
+                a spectrum ({})", error));
+            return Err(());
+        }
     };
 
     if saving.load(atomic::Ordering::Relaxed) {
@@ -429,8 +507,13 @@ fn watcher_callback<T: std::fmt::Debug>(
             *last_spectrum = Some(spectrum);
             new_spectrum.store(true, atomic::Ordering::Relaxed);
         },
-        Err(error) => log_error(&log_tx, format!("[FR] Could not acquire the spectrum lock ({})", error))
+        Err(error) => {
+            log_error(&log_tx, format!("[FWC] Could not acquire the spectrum lock ({})", error));
+            return Err(());
+        }
     };
+
+    Ok(())
 }
 
 fn auto_save_spectrum(spectrum: &Spectrum) -> Result<u32, Box<dyn Error>> {

@@ -2,7 +2,7 @@ use sycamore::prelude::*;
 // use itertools::Itertools;
 // use std::iter;
 
-use sycamore::futures::{ spawn_local_scoped };
+use sycamore::futures::spawn_local_scoped;
 
 use gloo_timers::future::TimeoutFuture;
 
@@ -11,6 +11,12 @@ use api::*;
 
 pub mod trace;
 use trace::*;
+
+pub mod graph;
+use graph::*;
+
+pub mod side_bar;
+use side_bar::*;
 
 
 fn main() {
@@ -58,225 +64,68 @@ fn Main<G:Html>(cx: Scope) -> View<G> {
         }
     });
 
-    let saving_new = create_signal(cx, false);
+    let saving = create_signal(cx, false);
+    let connection_state = create_signal(cx, ConnectionState::Disconnected);
+
+    spawn_local_scoped(cx, async move {
+        loop {
+            TimeoutFuture::new(200).await;
+            update_state(connection_state).await;
+        }
+    });
 
     view!{ cx,
         div(class="horizontal-container") {
-            SideBar(traces=traces, saving=saving_new)
+            SideBar(traces=traces, saving=saving)
             div(class="vertical-container") {
                 Graph(traces=traces, svg_size=svg_size)
-                LowerBar {}
+                LowerBar(saving=saving, connection_state=connection_state)
             }
+        }
+    }
+}
+
+async fn update_state<'a>(connection_state: &'a Signal<ConnectionState>) {
+    if let Some(new_state) = get_connection_state().await {
+        if new_state != *connection_state.get() {
+            connection_state.set(new_state); 
         }
     }
 }
 
 #[derive(Prop)]
-struct GraphProps<'a> {
-    svg_size: &'a ReadSignal<(i32, i32)>,
-    traces: &'a ReadSignal<Vec<Trace>>
+struct LowerBarProps<'a> {
+    saving: &'a ReadSignal<bool>,
+    connection_state: &'a Signal<ConnectionState>
 }
 
 #[component]
-fn Graph<'a, G:Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
-    view! { cx,
-        div(class="graph-space back") {
-            svg(
-                width=props.svg_size.get().0,
-                height=props.svg_size.get().1)
-            {
-                GraphFrame(svg_size=props.svg_size)
-                clipPath(id="graph-clip") {
-                    rect(
-                        width=(props.svg_size.get().0 - 44),
-                        height=(props.svg_size.get().1 - 20), 
-                        x="2", y="2") {}
-                }
-                Indexed(
-                    iterable=props.traces,
-                    view = |cx, trace| if trace.visible { 
-                        view! { cx,
-                            path(
-                                d=trace.svg_path,
-                                fill="none",
-                                stroke-width="2",
-                                stroke=trace_id_to_color(trace.id),
-                                clip-path="url(#graph-clip)"
-                                ) {}
-                        } 
-                    } else { view! { cx, "" } }
-                )
-            }
-        }
-    }
-}
+fn LowerBar<'a, G:Html>(cx: Scope<'a>, props: LowerBarProps<'a>) -> View<G> {
+    let connect = move |_| {
+        spawn_local_scoped(cx, async move {
+            connect_acquisitor().await;
+            update_state(props.connection_state).await;
+        })
+    };
+    let disconnect = move |_| {
+        spawn_local_scoped(cx, async move {
+            disconnect_acquisitor().await;
+            update_state(props.connection_state).await;
+        })
+    };
+    let start_reading = move |_| {
+        spawn_local_scoped(cx, async move {
+            acquisitor_start_reading().await;
+            update_state(props.connection_state).await;
+        })
+    };
+    let stop_reading = move |_| {
+        spawn_local_scoped(cx, async move {
+            acquisitor_stop_reading().await;
+            update_state(props.connection_state).await;
+        })
+    };
 
-#[derive(Prop)]
-struct FrameProps<'a> {
-    svg_size: &'a ReadSignal<(i32, i32)>
-}
-
-#[component]
-fn GraphFrame<'a, G:Html>(cx: Scope<'a>, props: FrameProps<'a>) -> View<G> {
-
-    let graph_size = create_memo(cx, || 
-        ((*props.svg_size.get()).0 - 40,        // 32 e 16 para os labels dos eixos
-        (*props.svg_size.get()).1 - 16)
-        
-    );
-
-    let path_sqr = create_memo(cx, || 
-        format!("M 1,1 L {},1 L {},{} L 1,{} L 1,1",
-            (*graph_size.get()).0 - 1,        // - 1 pra margem por conta ta largura do traço
-            (*graph_size.get()).0 - 1, (*graph_size.get()).1 - 1,
-            (*graph_size.get()).1 - 1
-        )
-    );
-
-    let n_divs = create_memo(cx, || 
-       ((*graph_size.get()).0 / 100 + 1,
-        (*graph_size.get()).1 / 62 + 1) 
-    );
-
-    let divs_x = create_memo(cx, ||
-        (1..(*n_divs.get()).0)
-            .map(|x| (x * (*graph_size.get()).0) / (*n_divs.get()).0)
-            .collect::<Vec<i32>>()
-    );
-
-    let divs_x_path = create_memo(cx, || 
-        (*divs_x.get()).iter()
-            .map(|x| format!("M {},1 L {},{}", x, x, (*graph_size.get()).1 - 1))
-            .collect::<Vec<String>>()
-    );
-
-    let divs_y = create_memo(cx, ||
-        (1..(*n_divs.get()).1)
-            .map(|y| (y * (*graph_size.get()).1) / (*n_divs.get()).1)
-            .collect::<Vec<i32>>()
-    );
-
-    let divs_y_path = create_memo(cx, || 
-        (*divs_y.get()).iter()
-            .map(|y| format!("M 1,{} L {},{}", y, (*graph_size.get()).0 - 1, y))
-            .collect::<Vec<String>>()
-    );
-
-
-    view! { cx,
-        rect(width=(graph_size.get().0 - 2), height=(graph_size.get().1 - 2), 
-            fill="white", x="1", y="1") {}
-        Indexed(
-            iterable=divs_x_path,
-            view = |cx, x| view! { cx,
-                path(d=x, fill="none", stroke-width="1", stroke="lightgray") {}
-            }
-        )
-        Indexed(
-            iterable=divs_y_path,
-            view = |cx, x| view! { cx,
-                path(d=x, fill="none", stroke-width="1", stroke="lightgray") {}
-            }
-        )
-
-        GraphLabels(graph_size=graph_size, divs_x=divs_x, divs_y=divs_y)
-
-        path(d=path_sqr.get(), fill="none",
-            stroke-width="2", stroke="#000000") {}
-        text(x=1, y=(graph_size.get().1 + 13), font-size="0.75rem") {
-            "Comp. de Onda (nm)"
-        }
-        text(x=(graph_size.get().0 + 4), y=12, font-size="0.75rem") {
-            "Pot."
-        }
-        text(x=(graph_size.get().0 + 4), y=24, font-size="0.75rem") {
-            "(dB)"
-        }
-    }
-
-}
-
-#[derive(Prop)]
-struct LabelsProps<'a> {
-    graph_size: &'a ReadSignal<(i32, i32)>,
-    divs_x: &'a ReadSignal<Vec<i32>>,
-    divs_y: &'a ReadSignal<Vec<i32>>
-}
-
-#[component]
-fn GraphLabels<'a, G:Html>(cx: Scope<'a>, props: LabelsProps<'a>) -> View<G> {
-
-    let wl_limits = create_signal(cx, (1500f64, 1600f64));
-    spawn_local_scoped(cx, async move {                                // Updates wl limits
-        loop {
-            TimeoutFuture::new(200).await;
-            let mut new_wl_limits = get_wavelength_limits().await;
-            if new_wl_limits.0 < 1.0 {                             // If lower, it is in meters (~1e-6)
-                new_wl_limits = (new_wl_limits.0*1e9, new_wl_limits.1*1e9);        // To nanometers
-            }
-            if new_wl_limits != *wl_limits.get() {
-                wl_limits.set(new_wl_limits);
-            }
-        }
-    });
-
-    let wl_limits_txt = create_memo(cx, ||
-        (*props.divs_x.get()).iter()
-            .skip(1)
-            .map(|x|
-                (x,
-                (*wl_limits.get()).0
-                + ((*wl_limits.get()).1 - (*wl_limits.get()).0)
-                * (*x as f64) / (*props.graph_size.get()).0 as f64)
-            ).map(|(pos, x)| (*pos, format!("{:.2}", x)))
-            .collect::<Vec<(i32, String)>>()
-    );
-
-    let pwr_limits = create_signal(cx, (3f64, -50f64));
-    spawn_local_scoped(cx, async move {                        // Updates power limits
-        loop {
-            TimeoutFuture::new(200).await;
-            let new_pwr_limits = get_power_limits().await;
-            if new_pwr_limits != *pwr_limits.get() {
-                pwr_limits.set(new_pwr_limits);
-            }
-        }
-    });
-
-    let pwr_limits_txt = create_memo(cx, ||
-        (*props.divs_y.get()).iter()
-            .map(|y|
-                (y,
-                (*pwr_limits.get()).0
-                + ((*pwr_limits.get()).1 - (*pwr_limits.get()).0)
-                * (*y as f64) / (*props.graph_size.get()).1 as f64)
-            ).map(|(pos, y)| (*pos + 4, format!("{:.1}", y)))
-            .collect::<Vec<(i32, String)>>()
-    );
-
-    view! { cx,
-        Indexed(
-            iterable=wl_limits_txt,
-            view = move |cx, (pos, txt)| view! { cx,
-                text(x=pos, y=(props.graph_size.get().1 + 13), font-size="0.75rem",
-                     text-anchor="middle") {
-                    (txt)
-                }
-            }
-        )
-        Indexed(
-            iterable=pwr_limits_txt,
-            view = move |cx, (pos, txt)| view! { cx,
-                text(x=(props.graph_size.get().0 + 4), y=pos, font-size="0.75rem") {
-                    (txt)
-                }
-            }
-        )
-    }
-}
-
-#[component]
-fn LowerBar<G:Html>(cx: Scope) -> View<G> {
     view! { cx, 
         div(class="lower-bar back") {
             div() {
@@ -284,225 +133,58 @@ fn LowerBar<G:Html>(cx: Scope) -> View<G> {
                 button() { "󰽉 "}
             }
             div() {
-                button(class="no-offset") { " " }
-                button(style="padding-right: 0.6rem;") { "󱑹 " }
-                button(class="no-offset") { "󱐥 " }
-                button() { "󱐤 " }
+                (match *props.connection_state.get() {
+                    ConnectionState::Connected => 
+                        view! { cx,
+                            button(on:click=start_reading, class="no-offset") { " " }
+                            button(style="padding-right: 0.6rem;") { "󱑹 " }        // TODO put single read
+                            button(on:click=disconnect) { "󱐤 " }
+                        },
+                    ConnectionState::Reading =>
+                        view! { cx,
+                            button(on:click=stop_reading, class="no-offset") { " " }
+                            button(on:click=disconnect) { "󱐤 " }
+                        },
+                    ConnectionState::Disconnected =>
+                        view! { cx,
+                            button(on:click=connect, class="no-offset") { "󱐥 " }
+                        }
+                })
             }
-            div(class="status") {
-                p() { "Lendo Const." }
-                p() { "Não Salvando" }
-            }
+            Status(saving=props.saving, connection_state=props.connection_state)
         }
     }
 }
 
+
 #[derive(Prop)]
-struct SideBarProps<'a> {
-    traces: &'a Signal<Vec<Trace>>,
-    saving: &'a Signal<bool>
+struct StatusProps<'a> {
+    saving: &'a ReadSignal<bool>,
+    connection_state: &'a ReadSignal<ConnectionState>
 }
 
 #[component]
-fn SideBar<'a, G:Html>(cx: Scope<'a>, props: SideBarProps<'a>) -> View<G> {
-    view! { cx,
-        div(class="side-bar") {
-            SideBarMain(traces=props.traces, saving=props.saving)
-            LogSpace {}
-        }
-    }
-}
-
-#[derive(Prop)]
-struct RenderTraceProps<'a> {
-    trace: Trace,
-    traces_list: &'a Signal<Vec<Trace>>,
-    saving: &'a Signal<bool>
-}
-
-async fn freeze_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
-    let mut traces_list = traces_list.modify();
-
-    let trace = &mut traces_list[id as usize];
-    if trace.svg_path.len() == 0 {        // Nao pode congelar onde não tem espectro
-        return ();
-    }
-
-    trace.freeze_time = Some(get_time().await);
-    trace.active = false;
-
-    traces_list.push(new_trace(id+1));
-
-    freeze_spectrum().await;
-}
-
-async fn delete_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
-    traces_list.modify().remove(id as usize);
-
-    for (i, mut trace) in traces_list.modify().iter_mut().enumerate() {
-        trace.id = i as u8;
-    }
-
-    delete_frozen_spectrum(id as usize).await;
-}
-
-async fn visibility_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
-    let trace = &mut traces_list.modify()[id as usize];
-    trace.visible = !trace.visible;
-}
-
-async fn save_frozen_callback<'a>(id: u8, _traces_list: &'a Signal<Vec<Trace>>) {
-    save_frozen_spectrum(id as usize).await;
-}
-
-async fn save_continuous_callback<'a>(saving: &'a Signal<bool>) {
-    save_continuous(!*saving.get()).await;
-    saving.set(get_saving().await);
-}
-
-async fn draw_valleys_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
-    let trace = &mut traces_list.modify()[id as usize];
-    trace.draw_valleys = !trace.draw_valleys;
-}
-
-#[component]
-fn RenderTrace<'a, G:Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<G> {
-    let freeze = move |_| {
-        spawn_local_scoped(cx, async move {
-            freeze_callback(props.trace.id, props.traces_list).await;
-        })
-    };
-    let delete = move |_| {
-        spawn_local_scoped(cx, async move {
-            delete_callback(props.trace.id, props.traces_list).await;
-        })
-    };
-    let visibility = move |_| {
-        spawn_local_scoped(cx, async move {
-            visibility_callback(props.trace.id, props.traces_list).await;
-        })
-    };
-    let save_frozen = move |_| {
-        spawn_local_scoped(cx, async move {
-            save_frozen_callback(props.trace.id, props.traces_list).await;
-        })
-    };
-    let save_continuous = move |_| {
-        spawn_local_scoped(cx, async move {
-            save_continuous_callback(props.saving).await;
-        })
-    };
-    let draw_valleys = move |_| {
-        spawn_local_scoped(cx, async move {
-            draw_valleys_callback(props.trace.id, props.traces_list).await;
-        })
-    };
-
+fn Status<'a, G:Html>(cx: Scope<'a>, props: StatusProps<'a>) -> View<G> {
     view! { cx, 
-        div(class="trace") {
-            span(class="name", style=trace_id_to_style(props.trace.id)) {
-                (trace_id_to_name(props.trace.id))
-            }
-            span(class="status") {
-                (match &props.trace.freeze_time {
-                    Some(time) => time.clone(),
-                    None => "(Ativo)".to_string()
-                })
-            }
-            div(class="buttons") {
-                (match props.trace.active {
-                    true => view! { cx, button(on:click=freeze) { " " } },
-                    false => view! { cx, button(on:click=delete) { "󰜺 " } }
-                })
+        div(class="status") {
+            (match *props.connection_state.get() {
+                ConnectionState::Connected => 
+                    view! { cx, p() { "Conectado" } },
+                ConnectionState::Disconnected =>
+                    view! { cx, p() { "Desconectado" } },
+                ConnectionState::Reading =>
+                    view! { cx, p() { "Lendo Const." } }
+            })
 
-                (if props.trace.visible {
-                    view! { cx, button(on:click=visibility) { " " } }
-                } else {
-                    view! { cx, button(on:click=visibility) { " " } }
-                })
-
-                (if props.trace.active {
-                    if *props.saving.get() {
-                        view! { cx, button(on:click=save_continuous) { "󱧹 " } }
-                    } else {
-                        view! { cx, button(on:click=save_continuous) { "󱃩 " } }
-                    }
-                } else {
-                    view! { cx, button(on:click=save_frozen) { " " } }
-                })
-
-                (if props.trace.draw_valleys {
-                    view! { cx, button(on:click=draw_valleys) { "󰽅 " } }
-                } else {
-                    view! { cx, button(on:click=draw_valleys) { "󰆤 " } }
-                })
-            }
-        }
-    }
-}
-
-#[derive(Prop)]
-struct SideBarMainProps<'a> {
-    traces: &'a Signal<Vec<Trace>>,
-    saving: &'a Signal<bool>
-}
-
-#[component]
-fn SideBarMain<'a, G:Html>(cx: Scope<'a>, props: SideBarMainProps<'a>) -> View<G> {
-    // let traces = create_signal(cx, vec![new_trace(0)]);
-
-    // create_effect(cx, move || {
-    //     let msg = format!("\nTraces changed: {:?}\n", traces);
-    //     spawn_local_scoped(cx, async move {
-    //         print_backend(&msg).await;
-    //     })
-    // });
-
-    view! { cx,
-        div(class="side-bar-main") {
-            p(class="title") { "Traços" }
-
-            div(class="trace-container back") {
-                Indexed(
-                    iterable = props.traces,
-                    view = move |cx, trace| view! { 
-                        cx, RenderTrace(trace=trace, traces_list=&props.traces, saving=&props.saving)
-                    }
-                )
-            }
-        }
-    }
-}
-
-#[component]
-fn LogSpace<G:Html>(cx: Scope) -> View<G> {
-    let logs = create_signal(cx, Vec::<Log>::with_capacity(30));
-
-    spawn_local_scoped(cx, async move {
-        // let mut count = 0u32;
-        loop {
-            TimeoutFuture::new(200).await;
-            let new_logs = get_last_logs().await;
-            for new_log in new_logs {
-                // new_log.id = count;
-                logs.modify().push(new_log);
-                // count += 1;
-            }
-        }
-    });
-
-    view! { cx,
-        div(class="side-bar-log") {
-            div(class="title") { "Registro" }
-            div(class="log-space back") {
-                Indexed(
-                    iterable = logs,
-                    view = |cx, x| view! { cx,
-                        p(class=x.log_type) { (x.msg) }
-                    }
-                    // key = |x| (*x).id,
-                )
-            }
+            (if *props.saving.get() {
+                view! { cx, 
+                    p() { "Salvando" }
+                }
+            } else {
+                view! { cx, 
+                    p() { "Não Salvando" }
+                }
+            })
         }
     }
 }

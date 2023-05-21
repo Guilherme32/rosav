@@ -144,4 +144,33 @@ pub async fn get_saving() -> bool {
     obj_rebuilt
 }
 
+#[derive(Serialize, Deserialize, PartialEq)]
+pub enum ConnectionState {
+    Disconnected,
+    Connected,
+    Reading
+}
+
+pub async fn get_connection_state() -> Option<ConnectionState> {
+    let from_back = invoke("get_connection_state", to_value(&()).unwrap()).await;
+    let obj_rebuilt: Option<ConnectionState> = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}
+
+pub async fn connect_acquisitor() {
+    invoke("connect_acquisitor", to_value(&()).unwrap()).await;
+}
+
+pub async fn disconnect_acquisitor() {
+    invoke("disconnect_acquisitor", to_value(&()).unwrap()).await;
+}
+
+pub async fn acquisitor_start_reading() {
+    invoke("acquisitor_start_reading", to_value(&()).unwrap()).await;
+}
+
+pub async fn acquisitor_stop_reading() {
+    invoke("acquisitor_stop_reading", to_value(&()).unwrap()).await;
+}
 

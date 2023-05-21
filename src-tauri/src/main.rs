@@ -6,9 +6,10 @@
 use app::*;
 // use std::thread::sleep;
 // use std::time::Duration;
-// use serde::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize};
 use std::sync::{ atomic, Mutex, mpsc };
 use chrono::prelude::*;
+use file_reader::ReaderState;
 
 use tauri::api::dialog::FileDialogBuilder;
 
@@ -160,20 +161,69 @@ fn save_continuous(save: bool, reader:tauri::State<file_reader::FileReader>) {
 }
 
 #[tauri::command]
-fn get_saving(reader:tauri::State<file_reader::FileReader>) -> bool {
+fn get_saving(reader: tauri::State<file_reader::FileReader>) -> bool {
     reader.saving_new.load(atomic::Ordering::Relaxed)
 }
 
+
+#[derive(Serialize, Deserialize)]
+enum ConnectionState {
+    Disconnected,
+    Connected,
+    Reading
+}
+
+#[tauri::command]
+fn get_connection_state(reader: tauri::State<file_reader::FileReader>) -> Option<ConnectionState> {
+    let state = match reader.state.lock() {
+        Ok(state) => state,
+        Err(_) => {
+            reader.log_error("[MCN] Failed to acquire state lock".to_string());
+            return None;
+        }
+    };
+
+    match *state {
+        ReaderState::Disconnected => Some(ConnectionState::Disconnected),
+        ReaderState::Connected => Some(ConnectionState::Connected),
+        ReaderState::Reading(_) => Some(ConnectionState::Reading)
+    }
+}
+
+#[tauri::command]
+fn connect_acquisitor(reader: tauri::State<file_reader::FileReader>) {
+    match reader.connect() {
+        _ => ()
+    }
+}
+
+#[tauri::command]
+fn disconnect_acquisitor(reader: tauri::State<file_reader::FileReader>) {
+    match reader.disconnect() {
+        _ => ()
+    }
+}
+
+#[tauri::command]
+fn acquisitor_start_reading(reader: tauri::State<file_reader::FileReader>) {
+    match reader.start_reading() {
+        _ => ()
+    }
+}
+
+#[tauri::command]
+fn acquisitor_stop_reading(reader: tauri::State<file_reader::FileReader>) {
+    match reader.stop_reading() {
+        _ => ()
+    }
+}
+
+
 fn main() {
     let (log_tx, log_rx) = mpsc::sync_channel::<Log>(64);
-    match log_tx.send(new_log("[MST] Starting the program".to_string(), LogType::Info)) {
-        Ok(_) => (),
-        Err(error) => println!("#Extreme error: The starting log failed ({})", error)
-    }
+    log_info(&log_tx, "[MST] Starting the program".to_string());
 
-    let mut reader = file_reader::new_file_reader("D:\\test".to_string(), log_tx);
-    reader.connect().unwrap();
-    reader.read_continuous().unwrap();
+    let reader = file_reader::new_file_reader("D:\\test".to_string(), log_tx);
 
     tauri::Builder::default()
         .manage(reader)
@@ -194,7 +244,12 @@ fn main() {
             get_frozen_spectrum_path,
             save_frozen_spectrum,
             save_continuous,
-            get_saving
+            get_saving,
+            get_connection_state,
+            connect_acquisitor,
+            disconnect_acquisitor,
+            acquisitor_start_reading,
+            acquisitor_stop_reading,
         ]).run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
