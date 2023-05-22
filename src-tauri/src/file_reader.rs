@@ -84,7 +84,7 @@ impl FileReader {
         let mut state = match self.state.lock() {
             Ok(state) => state,
             Err(_) => {
-                self.log_error("[FCN] Failed to acquire state lock".to_string());
+                self.log_error("[FCN] Falha ao obter lock para 'state'".to_string());
                 return Err(ConnectError::LockFailed)
             }
         };
@@ -92,8 +92,8 @@ impl FileReader {
         match *state {
             ReaderState::Disconnected => (),
             _ => {
-                self.log_war("[FCN] Could not connect: the acquisitor is \
-                    already connected".to_string());
+                self.log_war("[FCN] Não foi possível conectar: O aquisitor já \
+                    está conectado".to_string());
                 return Err(ConnectError::ReaderAlreadyConnected);
             }
         }
@@ -101,7 +101,7 @@ impl FileReader {
         let config = match self.config.lock() {
             Ok(config) => config,
             Err(_) => {
-                self.log_error("[FCN] Failed to acquire config lock".to_string());
+                self.log_error("[FCN] Falha ao obter lock para 'config'".to_string());
                 return Err(ConnectError::LockFailed)
             }
         };
@@ -109,27 +109,27 @@ impl FileReader {
 
         match path.try_exists() {
             Err(_) => { 
-                self.log_war("[FCN] Could not connect: the permission to \
-                    the path was denied".to_string());
+                self.log_war("[FCN] Não foi possível conectar: A permissão para
+                    acessar o caminho configurado foi negada".to_string());
                 return Err(ConnectError::PathWithoutPermission);
             },
             Ok(exists) => {
                 if !exists {
-                    self.log_war("[FCN] Could not connect: the configured \
-                        path does not exist".to_string());
+                    self.log_war("[FCN] Não foi possível conectar: O caminho \
+                        configurado não existe".to_string());
                     return Err(ConnectError::PathDoesNotExist);
                 }
             }
         }
 
         if !path.is_dir() {
-            self.log_war("[FCN] Could not connect: the configured \
-                path is not a directory".to_string());
+            self.log_war("[FCN] Não foi possível conectar: O caminho \
+                configurado não é uma pasta".to_string());
             return Err(ConnectError::PathIsNotDir);
         }
 
         *state = ReaderState::Connected;
-        self.log_info("[FCN] Acquisitor connected".to_string());
+        self.log_info("[FCN] Aquisitor conectado".to_string());
         Ok(())
     }
 
@@ -138,22 +138,22 @@ impl FileReader {
         let mut state = match self.state.lock() {
             Ok(state) => state,
             Err(_) => {
-                self.log_error("[FDN] Failed to acquire state lock".to_string());
+                self.log_error("[FDN] Falha ao obter lock para 'state'".to_string());
                 return Err("Lock acquisition failed");
             }
         };
 
         match *state {
             ReaderState::Disconnected => {
-                self.log_war("[FDN] Could not disconnect: the acquisitor is \
-                    already disconnected".to_string());
+                self.log_war("[FDN] Não foi possível desconectar: Aquisitor \
+                    já está desconectado".to_string());
                 return Err("Already disconnected");
             },
             _ => ()
         }
 
         *state = ReaderState::Disconnected;
-        self.log_info("[FDN] Acquisitor disconnected".to_string());
+        self.log_info("[FDN] Aquisitor desconectado".to_string());
         Ok(())
     }
 
@@ -162,7 +162,7 @@ impl FileReader {
         let mut state = match self.state.lock() {
             Ok(state) => state,
             Err(_) => {
-                self.log_error("[FSR] Failed to acquire state lock".to_string());
+                self.log_error("[FSR] Falha ao obter lock para 'state'".to_string());
                 return Err(ContinuousError::LockFailed)
             }
         };
@@ -176,7 +176,7 @@ impl FileReader {
         let config = match self.config.lock() {
             Ok(config) => config,
             Err(_) => {
-                self.log_error("[FSR] Failed to acquire config lock".to_string());
+                self.log_error("[FSR] Falha ao obter lock para 'config'".to_string());
                 return Err(ContinuousError::LockFailed)
             }
         };
@@ -201,8 +201,8 @@ impl FileReader {
             Err(_) => {
                 if let Ok(mut state) = state_reference.lock() {
                     *state = ReaderState::Disconnected;
-                    log_war(&log_sender_clone, "[FSR] Acquisition backend \
-                        disconnected due to an error".to_string());
+                    log_war(&log_sender_clone, "[FSR] Aquisitor desconectado \
+                        devido a um erro".to_string());
                 }
                 ()
             }
@@ -219,7 +219,7 @@ impl FileReader {
         }
 
         *state = ReaderState::Reading(watcher);
-        self.log_info("[FSR] Acquisitor reading".to_string());
+        self.log_info("[FSR] Aquisitor lendo".to_string());
         Ok(())
     }
 
@@ -228,7 +228,7 @@ impl FileReader {
         let mut state = match self.state.lock() {
             Ok(state) => state,
             Err(_) => {
-                self.log_error("[FTP] Failed to acquire state lock".to_string());
+                self.log_error("[FTP] Falha ao obter lock para 'state'".to_string());
                 return Err("Lock acquisition failed");
             }
         };
@@ -236,14 +236,14 @@ impl FileReader {
         match *state {
             ReaderState::Reading(_) => (),
             _ => {
-                self.log_war("[FTP] Could not stop reading: the acquisitor \
-                    was not reading".to_string());
+                self.log_war("[FTP] Não foi possível parar de ler, o aquisitor \
+                    não estava lendo".to_string());
                 return Err("Invalid State: Not reading");
             }
         }
 
         *state = ReaderState::Connected;
-        self.log_info("[FTP] Acq. stopped reading".to_string());
+        self.log_info("[FTP] Aquisitor parou de ler".to_string());
         Ok(())
     }
 
@@ -252,7 +252,7 @@ impl FileReader {
         let spectrum = match self.last_spectrum.lock() {
             Ok(spectrum) => spectrum,
             Err(_) => { 
-                self.log_error("[FGL] Could not acquire the lock to get last spectrum".to_string());
+                self.log_error("[FGL] Falha ao obter lock para 'last_spectrum'".to_string());
                 return None;
             }
         };
@@ -274,7 +274,7 @@ impl FileReader {
         let spectrum = match self.last_spectrum.lock() {
             Ok(spectrum) => spectrum,
             Err(_) => { 
-                self.log_error("[FUL] Could not acquire the lock to get last spectrum".to_string());
+                self.log_error("[FUL] Falha ao obter lock para 'last_spectrum'".to_string());
                 return ();
             }
         };
@@ -282,7 +282,7 @@ impl FileReader {
         let mut limits = match self.spectrum_limits.lock() {
             Ok(limits) => limits,
             Err(_) => { 
-                self.log_error("[FUL] Could not acquire the lock to get last limits".to_string());
+                self.log_error("[FUL] Falha ao obter lock para 'spectrum_limits'".to_string());
                 return ();
             }
         };
@@ -321,7 +321,7 @@ impl FileReader {
         let config = match self.config.lock() {
             Ok(config) => config,
             Err(_) => {
-                self.log_error("[FGL] Failed to acquire config lock".to_string());
+                self.log_error("[FGL] Falha ao obter lock para 'config'".to_string());
                 return None
             }
         };
@@ -329,7 +329,7 @@ impl FileReader {
         let default_limits = match self.spectrum_limits.lock() {
             Ok(spec_limits) => spec_limits,
             Err(_) => { 
-                self.log_error("[FGL] Could not acquire the lock to get last limits".to_string());
+                self.log_error("[FGL] Falha ao obter lock para 'spectrum_limits'".to_string());
                 return None;
             }
         };
@@ -359,7 +359,7 @@ impl FileReader {
         let mut frozen_list = match self.frozen_spectra.lock() {
             Ok(spectra) => spectra,
             Err(_) => { 
-                self.log_error("[FFS] Could not acquire the lock to get frozen spectra".to_string());
+                self.log_error("[FFS] Falha ao obter lock para os congelados".to_string());
                 return ();
             }
         };
@@ -367,7 +367,7 @@ impl FileReader {
         let spectrum = match self.last_spectrum.lock() {
             Ok(spectrum) => spectrum,
             Err(_) => { 
-                self.log_error("[FFS] Could not acquire the lock to get last spectrum".to_string());
+                self.log_error("[FFS] Falha ao obter lock para 'last_spectrum'".to_string());
                 return ();
             }
         };
@@ -375,9 +375,9 @@ impl FileReader {
         match &*spectrum {
             Some(spectrum) => { 
                 frozen_list.push(spectrum.clone());
-                self.log_info("[FFS] Freezing spectrum".to_string());
+                self.log_info("[FFS] Congelando espectro".to_string());
             },
-            None => self.log_war("[FFS] No spectrum to freeze".to_string())
+            None => self.log_war("[FFS] Sem espectro para congelar".to_string())
         }
     }
 
@@ -385,31 +385,33 @@ impl FileReader {
         let mut frozen_list = match self.frozen_spectra.lock() {
             Ok(spectra) => spectra,
             Err(_) => { 
-                self.log_error("[FDF] Could not acquire the lock to get frozen spectra".to_string());
+                self.log_error("[FDF] Falha ao obter lock para os congelados".to_string());
                 return ();
             }
         };
 
         if id >= frozen_list.len() {
-            self.log_error("[FDF] Could not delete the frozen spectrum, id out of bounds".to_string());
+            self.log_error("[FDF] Não foi possível deletar o congelado, id fora \
+                dos limites".to_string());
             return ();
         }
 
         frozen_list.remove(id);
-        self.log_info(format!("[FDF] Deleting frozen {}", id));
+        self.log_info(format!("[FDF] Deletando congelado {:02}", id));
     }
 
     pub fn get_frozen_spectrum_path(&self, id: usize, svg_limits: (u32, u32)) -> Option<String> {
         let frozen_list = match self.frozen_spectra.lock() {
             Ok(spectra) => spectra,
             Err(_) => { 
-                self.log_error("[FGF] Could not acquire the lock to get frozen spectra".to_string());
+                self.log_error("[FGF] Falha ao obter lock para os congelados".to_string());
                 return None;
             }
         };
 
         if id >= frozen_list.len() {
-            self.log_error("[FGF] Could not get the frozen spectrum, id out of bounds".to_string());
+            self.log_error("[FGF] Não foi possível pegar o espectro congelado, \
+                id fora dos limites".to_string());
             return None;
         }
 
@@ -418,7 +420,7 @@ impl FileReader {
         let spec_limits = match self.spectrum_limits.lock() {
             Ok(spec_limits) => spec_limits,
             Err(_) => { 
-                self.log_error("[FGF] Could not acquire the lock to get last limits".to_string());
+                self.log_error("[FGF] Falha ao obter lock para 'spectrum_limits'".to_string());
                 return None;
             }
         };
@@ -434,13 +436,14 @@ impl FileReader {
         let frozen_list = match self.frozen_spectra.lock() {
             Ok(spectra) => spectra,
             Err(_) => { 
-                self.log_error("[FCF] Could not acquire the lock to get frozen spectra".to_string());
+                self.log_error("[FCF] Falha ao obter lock para os congelados".to_string());
                 return None;
             }
         };
 
         if id >= frozen_list.len() {
-            self.log_error("[FCF] Could not get the frozen spectrum, id out of bounds".to_string());
+            self.log_error("[FCF] Não foi possível clonar o espectro congelado, \
+            id fora dos limites".to_string());
             return None;
         }
 
@@ -452,21 +455,23 @@ impl FileReader {
         let frozen_list = match self.frozen_spectra.lock() {
             Ok(spectra) => spectra,
             Err(_) => { 
-                self.log_error("[FSF] Could not acquire the lock to get frozen spectra".to_string());
+                self.log_error("[FSF] Falha ao obter lock para os congelados".to_string());
                 return ();
             }
         };
 
         if id >= frozen_list.len() {
-            self.log_error("[FSF] Could not get the frozen spectrum, id out of bounds".to_string());
+            self.log_error("[FSF] Não foi possível pegar o espectro congelado, \
+                id fora dos limites".to_string());
             return ();
         }
 
         let spectrum = &frozen_list[id];
 
         match spectrum.save(path) {
-            Ok(_) => self.log_info(format!("[FSF] Spectrum {} saved", id)),
-            Err(error) => self.log_error(format!("[FSF] Failed to save spectrum {} ({})", id, error))        // TODO parou aqui na tradução
+            Ok(_) => self.log_info(format!("[FSF] Espectro {} salvo", id)),
+            Err(error) => self.log_error(format!("[FSF] Falhou ao salvar \
+                espectro {} ({})", id, error))
         }
     } 
 
