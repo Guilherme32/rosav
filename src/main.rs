@@ -126,10 +126,16 @@ fn LowerBar<'a, G:Html>(cx: Scope<'a>, props: LowerBarProps<'a>) -> View<G> {
         })
     };
 
-    view! { cx, 
+    let update_config = move |_| {
+        spawn_local_scoped(cx, async move {
+            update_backend_config().await;
+        })
+    };
+
+    view! { cx,
         div(class="lower-bar back") {
             div() {
-                button() { "󰢻 "}
+                button(on:click=update_config) { "󰢻 "}
                 button() { "󰽉 "}
             }
             div() {

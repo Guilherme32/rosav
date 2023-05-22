@@ -23,6 +23,8 @@ itertools = "0.10.5"
 notify = "5.1.0"
 csv = "1.2.1"
 chrono = "0.4.24"
+toml = "0.6"
+home = "0.5.5"
 
 [features]
 # by default Tauri runs in production mode

@@ -19,7 +19,7 @@ pub struct Spectrum {
     values: Vec<SpectrumValue>
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Limits {
     pub wavelength: (f64, f64),
     pub power: (f64, f64)

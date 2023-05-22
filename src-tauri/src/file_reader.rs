@@ -37,7 +37,9 @@ pub fn test() {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FileReaderConfig {
     pub auto_save_path: String,
-    pub watcher_path: String
+    pub watcher_path: String,
+    pub wavelength_limits: Option<(f64, f64)>,
+    pub power_limits: Option<(f64, f64)>,
 }
 
 #[derive(Debug)]
@@ -255,18 +257,12 @@ impl FileReader {
             }
         };
 
-        let spec_limits = match self.spectrum_limits.lock() {
-            Ok(spec_limits) => spec_limits,
-            Err(_) => { 
-                self.log_error("[FUL] Could not acquire the lock to get last limits".to_string());
-                return None;
-            }
-        };
+        let spec_limits = self.get_limits();
 
-        if let Some(spec_limits) = &*spec_limits {
+        if let Some(spec_limits) = spec_limits {
             self.unread_spectrum.store(false, atomic::Ordering::Relaxed);
             match &*spectrum {
-                Some(spectrum) => Some(spectrum.to_path(svg_limits, spec_limits)),
+                Some(spectrum) => Some(spectrum.to_path(svg_limits, &spec_limits)),
                 None => None
             }
         } else {
@@ -319,6 +315,44 @@ impl FileReader {
                 *limits = Some(new_limits);
             }
         }
+    }
+
+    pub fn get_limits(&self) -> Option<Limits> {
+        let config = match self.config.lock() {
+            Ok(config) => config,
+            Err(_) => {
+                self.log_error("[FGL] Failed to acquire config lock".to_string());
+                return None
+            }
+        };
+        
+        let default_limits = match self.spectrum_limits.lock() {
+            Ok(spec_limits) => spec_limits,
+            Err(_) => { 
+                self.log_error("[FGL] Could not acquire the lock to get last limits".to_string());
+                return None;
+            }
+        };
+
+        let default_limits = match default_limits.clone() {
+            Some(limits) => limits,
+            None => return None
+        };
+
+        let limits_wl = match config.wavelength_limits {
+            Some(limits) => limits,
+            None => default_limits.wavelength
+        };
+
+        let limits_pwr = match config.power_limits {
+            Some(limits) => limits,
+            None => default_limits.power
+        };
+
+        Some(Limits {
+            wavelength: limits_wl,
+            power: limits_pwr
+        })
     }
 
     pub fn freeze_spectrum(&self) {
@@ -432,7 +466,7 @@ impl FileReader {
 
         match spectrum.save(path) {
             Ok(_) => self.log_info(format!("[FSF] Spectrum {} saved", id)),
-            Err(error) => self.log_error(format!("[FSF] Failed to save spectrum {} ({})", id, error))
+            Err(error) => self.log_error(format!("[FSF] Failed to save spectrum {} ({})", id, error))        // TODO parou aqui na tradução
         }
     } 
 
@@ -497,7 +531,7 @@ fn watcher_callback<T: std::fmt::Debug>(
         Ok(event) if event.kind.is_create() => event,
         Ok(_) => return Ok(()),                                // Don't care about successfull non create events
         Err(error) => {
-            log_error(&log_tx, format!("[FWC] watch error: {:?}", error));
+            log_error(&log_tx, format!("[FWC] Erro do 'watcher': {:?}", error));
             return Err(());
         }
     };
@@ -505,8 +539,8 @@ fn watcher_callback<T: std::fmt::Debug>(
     let text = match read_file_event(&event) {
         Ok(text) => text,
         Err(error) => {
-            log_error(&log_tx, format!("[FWC] Could not react to the create \
-                file event: {:?}, \nError: {}", event, error));
+            log_error(&log_tx, format!("[FWC] Não foi possível responder ao \
+                'file event': {:?}, \nErro: {}", event, error));
             return Err(());
         }
     };
@@ -514,16 +548,17 @@ fn watcher_callback<T: std::fmt::Debug>(
     let spectrum = match Spectrum::from_str(&text) {
         Ok(spectrum) => spectrum,
         Err(error) => {
-            log_error(&log_tx, format!("[FWC] Could not transform the file into \
-                a spectrum ({})", error));
+            log_error(&log_tx, format!("[FWC] Não foi posível transformar o \
+                arquivo em um espectro ({})", error));
             return Err(());
         }
     };
 
     if saving.load(atomic::Ordering::Relaxed) {
         match auto_save_spectrum(&spectrum, auto_save_path) {
-            Ok(num) => log_info(&log_tx, format!("[FWC] Saved new spectrum {:03}", num)),
-            Err(error) => log_error(&log_tx, format!("[FWC] Could not save new spectrum ({})", error))
+            Ok(num) => log_info(&log_tx, format!("[FWC] Espectro {:03} salvo", num)),
+            Err(error) => log_error(&log_tx, format!("[FWC] Não foi possível \
+                salvar o espectro novo ({})", error))
         }
     }
 
@@ -532,8 +567,8 @@ fn watcher_callback<T: std::fmt::Debug>(
             *last_spectrum = Some(spectrum);
             new_spectrum.store(true, atomic::Ordering::Relaxed);
         },
-        Err(error) => {
-            log_error(&log_tx, format!("[FWC] Could not acquire the spectrum lock ({})", error));
+        Err(_) => {
+            log_error(&log_tx, "[FWC] Falha ao adquirir lock para 'spectrum'".to_string());
             return Err(());
         }
     };
@@ -553,7 +588,23 @@ fn auto_save_spectrum(spectrum: &Spectrum, folder_path: &str) -> Result<u32, Box
         }
     } 
 
-    Err(Box::new(io::Error::new(io::ErrorKind::Other, "Spectrum overflow,\
-        can only save up to spectrum99999")))
+    Err(Box::new(io::Error::new(io::ErrorKind::Other, "Overflow de espectros,\
+        o programa só suporta até 'spectrum99999'")))
 }
 
+
+// region Config -----------------------------------------------------------------------------------
+
+impl FileReader {
+    pub fn update_config(&self, new_config: FileReaderConfig) {
+        let mut config = match self.config.lock() {
+            Ok(config) => config,
+            Err(_) => {
+                self.log_error("[FUC] Falha ao adquirir lock para 'config".to_string());
+                return ()
+            }
+        };
+
+        *config = new_config;
+    }
+}

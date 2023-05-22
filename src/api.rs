@@ -174,3 +174,7 @@ pub async fn acquisitor_stop_reading() {
     invoke("acquisitor_stop_reading", to_value(&()).unwrap()).await;
 }
 
+pub async fn update_backend_config() {
+    invoke("update_backend_config", to_value(&()).unwrap()).await;
+}
+
