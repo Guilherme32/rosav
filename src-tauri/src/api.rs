@@ -69,15 +69,9 @@ pub fn get_time() -> String {
 
 #[tauri::command]
 pub fn get_wavelength_limits(reader: tauri::State<FileReader>) -> (f64, f64) {
-    let limits = match reader.spectrum_limits.lock() {
-        Ok(limits) => limits,
-        Err(_) => {
-            println!("[MWL] Falha ao adquirir lock para 'limits'");
-            return (1000.0, 2000.0);
-        }
-    };
+    let limits = reader.get_limits();
 
-    if let Some(limits) = &*limits {
+    if let Some(limits) = limits {
         limits.wavelength
     } else {
         (1010.0, 1990.0)
@@ -86,15 +80,9 @@ pub fn get_wavelength_limits(reader: tauri::State<FileReader>) -> (f64, f64) {
 
 #[tauri::command]
 pub fn get_power_limits(reader: tauri::State<FileReader>) -> (f64, f64) {
-    let limits = match reader.spectrum_limits.lock() {
-        Ok(limits) => limits,
-        Err(_) => {
-            println!("[MWL] Falha ao adquirir lock para 'limits'");
-            return (10.0, -5.0);
-        }
-    };
+    let limits = reader.get_limits();
 
-    if let Some(limits) = &*limits {
+    if let Some(limits) = limits {
         (limits.power.1, limits.power.0)
     } else {
         (10.5, -10.0)

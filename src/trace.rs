@@ -1,3 +1,17 @@
+#[derive(Clone, PartialEq, Debug)]
+pub struct TraceInfo {
+    pub wavelength_limits: (f64, f64),
+    pub power_limits: (f64, f64),
+    pub svg_size: (i32, i32)
+}
+
+fn empty_trace_info() -> TraceInfo {
+    TraceInfo {
+        wavelength_limits: (0.0, 0.0),
+        power_limits: (0.0, 0.0),
+        svg_size: (0, 0)
+    }
+}
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Trace {
@@ -6,9 +20,10 @@ pub struct Trace {
     pub draw_valleys: bool,                // TODO adicionar detecção de vale
     pub active: bool,
     pub valleys: Vec<f64>,
-    pub svg_size: (i32, i32),
+    // pub svg_size: (i32, i32),
     pub svg_path: String,
-    pub freeze_time: Option<String>        // Se None não está congelado
+    pub freeze_time: Option<String>,        // Se None não está congelado
+    pub drawn_info: TraceInfo             // Stuff to check if it needs to be redrawn
 }
 
 pub fn new_trace(id: u8) -> Trace {
@@ -18,9 +33,9 @@ pub fn new_trace(id: u8) -> Trace {
         draw_valleys: true,
         active: true,
         valleys: vec![],
-        svg_size: (0, 0),
         svg_path: String::new(),
-        freeze_time: None
+        freeze_time: None,
+        drawn_info: empty_trace_info()
     }
 }
 

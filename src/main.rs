@@ -26,6 +26,18 @@ fn main() {
 }
 
 
+async fn get_trace_info() -> TraceInfo {
+    let svg_size = get_svg_size().await;
+    let wavelength_limits = get_wavelength_limits().await;
+    let power_limits = get_power_limits().await;
+
+    TraceInfo {
+        svg_size,
+        wavelength_limits,
+        power_limits
+    }
+}
+
 // COMPONENTS ----------------------------
 
 #[component]
@@ -37,10 +49,13 @@ fn Main<G:Html>(cx: Scope) -> View<G> {
     spawn_local_scoped(cx, async move {
         loop {
             TimeoutFuture::new(200).await;
+            let current_info = get_trace_info().await;
+
             if unread_spectrum().await {                // Get the latest spectrum if it is available
                 let new_path = get_last_spectrum_path().await;
+
                 traces.modify().last_mut().map(|trace| {
-                    trace.svg_size = *svg_size.get();
+                    trace.drawn_info = current_info.clone();
                     trace.svg_path = new_path;
                 });
                 continue;                // Skip the loop to end the modify() and avoid problems
@@ -51,8 +66,8 @@ fn Main<G:Html>(cx: Scope) -> View<G> {
                 if trace.svg_path.len() == 0 {                             // No old spectrum, no update
                     continue;
                 }
-                if trace.svg_size !=  new_svg_size {
-                    trace.svg_size = new_svg_size;
+                if trace.drawn_info !=  current_info {
+                    trace.drawn_info = current_info.clone();
                     if trace.active {
                         trace.svg_path = get_last_spectrum_path().await;
                     } else {
