@@ -99,34 +99,69 @@ fn GraphFrame<'a, G:Html>(cx: Scope<'a>, props: FrameProps<'a>) -> View<G> {
 
 
     view! { cx,
-        rect(width=(graph_size.get().0 - 2), height=(graph_size.get().1 - 2), 
-            fill="white", x="1", y="1") {}
+        rect(
+            width=(graph_size.get().0 - 2),
+            height=(graph_size.get().1 - 2),
+            fill="#16161D",
+            x="1",
+            y="1"
+        ) {}
+
         Indexed(
             iterable=divs_x_path,
             view = |cx, x| view! { cx,
-                path(d=x, fill="none", stroke-width="1", stroke="lightgray") {}
+                path(
+                    d=x,
+                    fill="none",
+                    stroke-width="1",
+                    stroke="#938056",
+                    opacity="0.5"
+                ) {}
             }
         )
+
         Indexed(
             iterable=divs_y_path,
             view = |cx, x| view! { cx,
-                path(d=x, fill="none", stroke-width="1", stroke="lightgray") {}
+                path(
+                    d=x,
+                    fill="none",
+                    stroke-width="1",
+                    stroke="#938056",
+                    opacity="0.5"
+                ) {}
             }
         )
 
         GraphLabels(graph_size=graph_size, divs_x=divs_x, divs_y=divs_y)
 
-        path(d=path_sqr.get(), fill="none",
-            stroke-width="2", stroke="#000000") {}
-        text(x=1, y=(graph_size.get().1 + 13), font-size="0.75rem") {
-            "Comp. de Onda (nm)"
-        }
-        text(x=(graph_size.get().0 + 4), y=12, font-size="0.75rem") {
-            "Pot."
-        }
-        text(x=(graph_size.get().0 + 4), y=24, font-size="0.75rem") {
-            "(dB)"
-        }
+        path(
+            d=path_sqr.get(),
+            fill="none",
+            stroke-width="2",
+            stroke="#938056"
+        ) {}
+
+        text(
+            x=1,
+            y=(graph_size.get().1 + 13),
+            font-size="0.75rem",
+            fill="#938056"
+        ) { "Comp. de Onda (nm)" }
+
+        text(
+            x=(graph_size.get().0 + 4),
+            y=12,
+            font-size="0.75rem",
+            fill="#938056"
+        ) { "Pot." }
+
+        text(
+            x=(graph_size.get().0 + 4),
+            y=24,
+            font-size="0.75rem",
+            fill="#938056"
+        ) { "(dB)" }
     }
 
 }
@@ -193,18 +228,24 @@ fn GraphLabels<'a, G:Html>(cx: Scope<'a>, props: LabelsProps<'a>) -> View<G> {
         Indexed(
             iterable=wl_limits_txt,
             view = move |cx, (pos, txt)| view! { cx,
-                text(x=pos, y=(props.graph_size.get().1 + 13), font-size="0.75rem",
-                     text-anchor="middle") {
-                    (txt)
-                }
+                text(
+                    x=pos,
+                    y=(props.graph_size.get().1 + 13),
+                    font-size="0.75rem",
+                    text-anchor="middle",
+                    fill="#c0a36e"
+                ) { (txt) }
             }
         )
         Indexed(
             iterable=pwr_limits_txt,
             view = move |cx, (pos, txt)| view! { cx,
-                text(x=(props.graph_size.get().0 + 4), y=pos, font-size="0.75rem") {
-                    (txt)
-                }
+                text(
+                    x=(props.graph_size.get().0 + 4),
+                    y=pos,
+                    font-size="0.75rem",
+                    fill="#c0a36e"
+                ) { (txt) }
             }
         )
     }
