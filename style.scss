@@ -64,6 +64,11 @@ $error_back: $winterRed;
   color: $text;
 }
 
+*::selection {
+  background-color: $waveBlue2;
+  color: $boatYellow2;
+}
+
 body {
   background-color: $hard-back;
 }
@@ -165,6 +170,7 @@ button {
   border: 1px solid $border;
   margin: auto;
   padding: 1px 3px;
+  user-select: none;
 }
 
 button:hover {
