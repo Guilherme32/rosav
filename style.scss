@@ -110,21 +110,21 @@ body {
   padding: 1px;
 }
 
-.trace-container {
+.side-container {
   flex: 1;
   overflow-x: hidden;
   overflow-y: auto;
 }
 
-.trace-container::-webkit-scrollbar {
+.side-container::-webkit-scrollbar {
   width: 5px;
 }
 
-.trace-container::-webkit-scrollbar-thumb { /* Foreground */
+.side-container::-webkit-scrollbar-thumb { /* Foreground */
   background: $scroll_fore;        /* black */
 }
 
-.trace-container::-webkit-scrollbar-track { /* Background */
+.side-container::-webkit-scrollbar-track { /* Background */
   background: $scroll_back;
 }
 

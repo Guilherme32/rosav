@@ -3,6 +3,8 @@ use serde::{Serialize, Deserialize};
 use serde_wasm_bindgen::{to_value, from_value};
 use std::fmt;
 
+use std::path::PathBuf;
+
 // API -------------------------------
 
 #[wasm_bindgen]
@@ -178,3 +180,9 @@ pub async fn update_backend_config() {
     invoke("update_backend_config", to_value(&()).unwrap()).await;
 }
 
+pub async fn get_path() -> Option<PathBuf> {
+    let from_back = invoke("get_path", to_value(&()).unwrap()).await;
+    let obj_rebuilt: Option<PathBuf> = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}

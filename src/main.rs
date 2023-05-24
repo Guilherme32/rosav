@@ -38,6 +38,11 @@ async fn get_trace_info() -> TraceInfo {
     }
 }
 
+pub enum ActiveSide {
+    Traces,
+    Config
+}
+
 // COMPONENTS ----------------------------
 
 #[component]
@@ -89,12 +94,28 @@ fn Main<G:Html>(cx: Scope) -> View<G> {
         }
     });
 
+    let active_side = create_signal(cx, ActiveSide::Traces);
+
     view!{ cx,
         div(class="horizontal-container") {
-            SideBar(traces=traces, saving=saving)
+
+            SideBar(
+                traces=traces,
+                saving=saving,
+                active_side=active_side
+            )
+
             div(class="vertical-container") {
-                Graph(traces=traces, svg_size=svg_size)
-                LowerBar(saving=saving, connection_state=connection_state)
+                Graph(
+                    traces=traces,
+                    svg_size=svg_size
+                )
+
+                LowerBar(
+                    saving=saving,
+                    connection_state=connection_state,
+                    active_side=active_side
+                )
             }
         }
     }
@@ -111,7 +132,8 @@ async fn update_state<'a>(connection_state: &'a Signal<ConnectionState>) {
 #[derive(Prop)]
 struct LowerBarProps<'a> {
     saving: &'a ReadSignal<bool>,
-    connection_state: &'a Signal<ConnectionState>
+    connection_state: &'a Signal<ConnectionState>,
+    active_side: &'a Signal<ActiveSide>
 }
 
 #[component]
@@ -141,17 +163,29 @@ fn LowerBar<'a, G:Html>(cx: Scope<'a>, props: LowerBarProps<'a>) -> View<G> {
         })
     };
 
-    let update_config = move |_| {
-        spawn_local_scoped(cx, async move {
-            update_backend_config().await;
-        })
+    let enter_config = move |_| {
+        match *props.active_side.get() {
+            ActiveSide::Config => (),
+            _ => {
+                props.active_side.set(ActiveSide::Config);
+            }
+        }
+    };
+
+    let enter_traces = move |_| {
+        match *props.active_side.get() {
+            ActiveSide::Traces => (),
+            _ => {
+                props.active_side.set(ActiveSide::Traces);
+            }
+        }
     };
 
     view! { cx,
         div(class="lower-bar back") {
             div() {
-                button(on:click=update_config) { "󰢻 "}
-                button() { "󰽉 "}
+                button(on:click=enter_traces) { "󰽉 "}
+                button(on:click=enter_config) { "󰢻 "}
             }
             div() {
                 (match *props.connection_state.get() {

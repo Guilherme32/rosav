@@ -63,7 +63,8 @@ fn main() {
             disconnect_acquisitor,
             acquisitor_start_reading,
             acquisitor_stop_reading,
-            update_backend_config
+            update_backend_config,
+            get_path
         ]).run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

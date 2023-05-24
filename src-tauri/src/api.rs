@@ -1,7 +1,7 @@
 use serde::{Serialize, Deserialize};
 use std::sync::{ atomic, Mutex, mpsc };
 use chrono::prelude::*;
-use tauri::api::dialog::FileDialogBuilder;
+use tauri::api::dialog::{ FileDialogBuilder, blocking };
 
 use crate::*;
 use file_reader::{ ReaderState, FileReader };
@@ -205,4 +205,13 @@ pub fn update_backend_config(reader: tauri::State<FileReader>) {
         Err(error) => reader.log_error(format!("[MUC] Não foi possível \
             atualizar a config. ({})", error))
     }
+}
+
+#[tauri::command]
+pub async fn get_path(window: tauri::Window) -> Option<PathBuf> {
+    blocking::FileDialogBuilder::new()
+        .add_filter("text", &["txt", ])
+        .set_file_name("spectrum")
+        .set_parent(&window)
+        .save_file()
 }

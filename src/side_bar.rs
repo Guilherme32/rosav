@@ -2,21 +2,37 @@ use sycamore::prelude::*;
 use sycamore::futures::spawn_local_scoped;
 use gloo_timers::future::TimeoutFuture;
 
+use std::path::PathBuf;
+
 use crate::api::*;
 use crate::trace::*;
+use crate::ActiveSide;
 
 
 #[derive(Prop)]
 pub struct SideBarProps<'a> {
     traces: &'a Signal<Vec<Trace>>,
-    saving: &'a Signal<bool>
+    saving: &'a Signal<bool>,
+    active_side: &'a ReadSignal<ActiveSide>
 }
 
 #[component]
 pub fn SideBar<'a, G:Html>(cx: Scope<'a>, props: SideBarProps<'a>) -> View<G> {
     view! { cx,
         div(class="side-bar") {
-            SideBarMain(traces=props.traces, saving=props.saving)
+            (match *props.active_side.get() {
+                ActiveSide::Traces => 
+                    view! { cx, 
+                        SideBarMain(
+                            traces=props.traces,
+                            saving=props.saving
+                        )
+                    },
+                ActiveSide::Config =>
+                    view! { cx,
+                        ConfigWindow {}
+                    }
+            })
             LogSpace {}
         }
     }
@@ -158,24 +174,19 @@ struct SideBarMainProps<'a> {
 
 #[component]
 fn SideBarMain<'a, G:Html>(cx: Scope<'a>, props: SideBarMainProps<'a>) -> View<G> {
-    // let traces = create_signal(cx, vec![new_trace(0)]);
-
-    // create_effect(cx, move || {
-    //     let msg = format!("\nTraces changed: {:?}\n", traces);
-    //     spawn_local_scoped(cx, async move {
-    //         print_backend(&msg).await;
-    //     })
-    // });
-
     view! { cx,
         div(class="side-bar-main") {
             p(class="title") { "Traços" }
 
-            div(class="trace-container back") {
+            div(class="side-container back") {
                 Indexed(
                     iterable = props.traces,
                     view = move |cx, trace| view! { 
-                        cx, RenderTrace(trace=trace, traces_list=&props.traces, saving=&props.saving)
+                        cx, RenderTrace(
+                            trace=trace,
+                            traces_list=&props.traces,
+                            saving=&props.saving
+                        )
                     }
                 )
             }
@@ -211,6 +222,39 @@ fn LogSpace<G:Html>(cx: Scope) -> View<G> {
                     }
                     // key = |x| (*x).id,
                 )
+            }
+        }
+    }
+}
+
+#[component]
+fn ConfigWindow<G:Html>(cx: Scope) -> View<G> {
+    let file = create_signal(cx, PathBuf::new());
+    let file_display = create_memo(cx, || {
+        match (*file.get()).to_str() {
+            None => "".to_string(),
+            Some(txt) => txt.clone().to_string()
+        }
+    });
+
+    let find_path = move |_| {
+        spawn_local_scoped(cx, async move {
+            match get_path().await {
+                None => (),
+                Some(path) => file.set(path)
+            }
+        });
+    };
+
+    view! { cx, 
+        div(class="side-bar-main") {
+            p(class="title") { "Configurações" }
+            div(class="side-container back") {
+                p { "Configs" }
+                
+                button(on:click=find_path) { "meclica" }
+                
+                p { (file_display.get()) }
             }
         }
     }
