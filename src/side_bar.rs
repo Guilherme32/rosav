@@ -239,18 +239,28 @@ fn ConfigWindow<G:Html>(cx: Scope) -> View<G> {
 
     let find_path = move |_| {
         spawn_local_scoped(cx, async move {
-            match get_path().await {
+            match pick_folder().await {
                 None => (),
                 Some(path) => file.set(path)
             }
         });
     };
 
+    let config = create_signal(cx, empty_back_config());
+    spawn_local_scoped(cx, async move {
+        match get_back_config().await {
+            Some(_config) => config.set(_config),
+            None => ()
+        }
+    });
+
     view! { cx, 
         div(class="side-bar-main") {
             p(class="title") { "Configurações" }
             div(class="side-container back") {
-                p { "Configs" }
+                p { "Backend Geral" }
+                hr {}
+                p { (config.get().watcher_path) }
                 
                 button(on:click=find_path) { "meclica" }
                 
@@ -259,3 +269,6 @@ fn ConfigWindow<G:Html>(cx: Scope) -> View<G> {
         }
     }
 }
+
+
+

@@ -4,7 +4,7 @@ use chrono::prelude::*;
 use tauri::api::dialog::{ FileDialogBuilder, blocking };
 
 use crate::*;
-use file_reader::{ ReaderState, FileReader };
+use file_reader::{ ReaderState, FileReader, FileReaderConfig };
 
 #[tauri::command]
 pub fn hello() {
@@ -208,10 +208,21 @@ pub fn update_backend_config(reader: tauri::State<FileReader>) {
 }
 
 #[tauri::command]
-pub async fn get_path(window: tauri::Window) -> Option<PathBuf> {
+pub async fn pick_folder(window: tauri::Window) -> Option<PathBuf> {
     blocking::FileDialogBuilder::new()
-        .add_filter("text", &["txt", ])
-        .set_file_name("spectrum")
         .set_parent(&window)
-        .save_file()
+        .pick_folder()
+}
+
+#[tauri::command]
+pub fn get_back_config(reader: tauri::State<FileReader>) -> Option<FileReaderConfig> {
+    let config = match reader.config.lock() {
+        Ok(config) => config,
+        Err(_) => {
+            reader.log_error("[ABC] Falha ao obter lock para config".to_string());
+            return None;
+        }
+    };
+
+    Some(config.clone())
 }

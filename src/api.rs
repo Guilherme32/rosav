@@ -180,9 +180,33 @@ pub async fn update_backend_config() {
     invoke("update_backend_config", to_value(&()).unwrap()).await;
 }
 
-pub async fn get_path() -> Option<PathBuf> {
-    let from_back = invoke("get_path", to_value(&()).unwrap()).await;
+pub async fn pick_folder() -> Option<PathBuf> {
+    let from_back = invoke("pick_folder", to_value(&()).unwrap()).await;
     let obj_rebuilt: Option<PathBuf> = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FileReaderConfig {
+    pub auto_save_path: String,
+    pub watcher_path: String,
+    pub wavelength_limits: Option<(f64, f64)>,
+    pub power_limits: Option<(f64, f64)>,
+}
+
+pub fn empty_back_config() -> FileReaderConfig {
+    FileReaderConfig {
+        auto_save_path: String::new(),
+        watcher_path: String::new(),
+        wavelength_limits: None,
+        power_limits: None
+    }
+}
+
+pub async fn get_back_config() -> Option<FileReaderConfig> {
+    let from_back = invoke("get_back_config", to_value(&()).unwrap()).await;
+    let obj_rebuilt: Option<FileReaderConfig> = from_value(from_back).unwrap();
 
     obj_rebuilt
 }

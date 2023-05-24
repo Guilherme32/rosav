@@ -34,7 +34,7 @@ pub fn test() {
 //     watcher: notify::RecommendedWatcher
 // }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FileReaderConfig {
     pub auto_save_path: String,
     pub watcher_path: String,
