@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::{ Log, log_info, log_error, log_war };
 
 use std::path::Path;
