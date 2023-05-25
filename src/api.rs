@@ -187,18 +187,18 @@ pub async fn pick_folder() -> Option<PathBuf> {
     obj_rebuilt
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FileReaderConfig {
-    pub auto_save_path: String,
-    pub watcher_path: String,
+    pub auto_save_path: PathBuf,
+    pub watcher_path: PathBuf,
     pub wavelength_limits: Option<(f64, f64)>,
     pub power_limits: Option<(f64, f64)>,
 }
 
 pub fn empty_back_config() -> FileReaderConfig {
     FileReaderConfig {
-        auto_save_path: String::new(),
-        watcher_path: String::new(),
+        auto_save_path: PathBuf::new(),
+        watcher_path: PathBuf::new(),
         wavelength_limits: None,
         power_limits: None
     }

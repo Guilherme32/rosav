@@ -290,3 +290,48 @@ button:active {
 }
 
 
+// Region Config ----------------------------------------------------------------------------------
+
+.config {
+  font-size: 0.75rem;
+  word-break: break-all;
+  padding: 0px 2px 5px 2px;
+}
+
+.config .mini-title {
+  font-size: 0.85rem;
+  text-align: center;
+  background-color: $border;
+  color: $title;
+  margin: 5px 0px;
+}
+
+.config button {
+  width: 1.5rem;
+  padding-left: 4px;
+  margin-right: 5px;
+  text-align: left;
+}
+
+.config .element {
+  border: 2px solid $border;
+  padding: 1px 2px;
+  margin-top: 5px;
+  background-color: $elements_back;
+}
+
+.config input {
+  background-color: $border;
+  width: 3rem;
+  border: 2px solid $main_back;
+  margin-right: 5px;
+}
+
+.config input:focus {
+  outline: none;
+}
+
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+}

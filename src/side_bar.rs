@@ -2,8 +2,6 @@ use sycamore::prelude::*;
 use sycamore::futures::spawn_local_scoped;
 use gloo_timers::future::TimeoutFuture;
 
-use std::path::PathBuf;
-
 use crate::api::*;
 use crate::trace::*;
 use crate::ActiveSide;
@@ -229,23 +227,6 @@ fn LogSpace<G:Html>(cx: Scope) -> View<G> {
 
 #[component]
 fn ConfigWindow<G:Html>(cx: Scope) -> View<G> {
-    let file = create_signal(cx, PathBuf::new());
-    let file_display = create_memo(cx, || {
-        match (*file.get()).to_str() {
-            None => "".to_string(),
-            Some(txt) => txt.clone().to_string()
-        }
-    });
-
-    let find_path = move |_| {
-        spawn_local_scoped(cx, async move {
-            match pick_folder().await {
-                None => (),
-                Some(path) => file.set(path)
-            }
-        });
-    };
-
     let config = create_signal(cx, empty_back_config());
     spawn_local_scoped(cx, async move {
         match get_back_config().await {
@@ -254,17 +235,109 @@ fn ConfigWindow<G:Html>(cx: Scope) -> View<G> {
         }
     });
 
+    let update_save_path = move |_| {
+        spawn_local_scoped(cx, async move {
+            match pick_folder().await {
+                None => (),
+                Some(path) => (*config.modify()).auto_save_path = path
+            }
+        });
+    };
+
+    let update_watcher_path = move |_| {
+        spawn_local_scoped(cx, async move {
+            match pick_folder().await {
+                None => (),
+                Some(path) => (*config.modify()).watcher_path = path
+            }
+        });
+    };
+
+    let watcher_path = create_memo(cx, || {
+        format!("{}", (*config.get()).watcher_path.display())
+    });
+
+    let save_path = create_memo(cx, || {
+        format!("{}", (*config.get()).auto_save_path.display())
+    });
+
+    let wl_min = create_signal(cx, String::from("100"));
+    let wl_max = create_signal(cx, String::new());
+
+    let test = move |x: sycamore::rt::Event| {
+        x.prevent_default();
+        spawn_local_scoped(cx, async move {
+            print_backend(&format!("{:?}", x)).await;
+        });
+    };
+
     view! { cx, 
         div(class="side-bar-main") {
             p(class="title") { "Configurações" }
-            div(class="side-container back") {
-                p { "Backend Geral" }
-                hr {}
-                p { (config.get().watcher_path) }
-                
-                button(on:click=find_path) { "meclica" }
-                
-                p { (file_display.get()) }
+            form(class="side-container back config", on:submit=test) {
+                input(type="submit", style="display: none;")
+
+                p(class="mini-title") { "Backend Geral" }
+
+                div(class="element") {
+                    p { "Caminho do auto save:" }
+                    p { 
+                        button(on:click=update_save_path) { " " }
+                        (save_path.get())
+                    }
+                }
+
+                div(class="element") {
+                    p { "Limites do comp. de onda:"}
+                    p {
+                        input(
+                            type="number",
+                            min="100",
+                            max="3000",
+                            bind:value=wl_min,
+                            on:focusout=test
+                        ) {}
+                        input(
+                            type="number",
+                            min="100",
+                            max="3000",
+                            bind:value=wl_max,
+                            on:focusout=test
+                        ) {}
+                        "(nm)"
+                    }
+                }
+
+                div(class="element") {
+                    p { "Limites da potência:"}
+                    p {
+                        input(
+                            type="number",
+                            min="-100",
+                            max="100",
+                            bind:value=wl_max,
+                            on:focusout=test
+                        ) {}
+                        input(
+                            type="number",
+                            min="-100",
+                            max="100",
+                            bind:value=wl_max,
+                            on:focusout=test
+                        ) {}
+                        "(dB)"
+                    }
+                }
+
+                p(class="mini-title") { "Aquisitor" }
+
+                div(class="element") {
+                    p { "Caminho para vigiar:" }
+                    p { 
+                        button(on:click=update_watcher_path) { " " }
+                        (watcher_path.get())
+                    }
+                }
             }
         }
     }

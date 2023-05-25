@@ -94,7 +94,7 @@ fn Main<G:Html>(cx: Scope) -> View<G> {
         }
     });
 
-    let active_side = create_signal(cx, ActiveSide::Traces);
+    let active_side = create_signal(cx, ActiveSide::Config);            // TODO change back to traces
 
     view!{ cx,
         div(class="horizontal-container") {

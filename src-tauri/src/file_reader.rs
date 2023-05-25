@@ -16,6 +16,8 @@ use std::sync::{Arc, Mutex};
 use std::sync::atomic::{ self, AtomicBool };
 use std::sync::mpsc::SyncSender;
 
+use std::path::PathBuf;
+
 use serde::{Serialize, Deserialize};
 
 use crate::spectrum::*;
@@ -36,8 +38,8 @@ pub fn test() {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FileReaderConfig {
-    pub auto_save_path: String,
-    pub watcher_path: String,
+    pub auto_save_path: PathBuf,
+    pub watcher_path: PathBuf,
     pub wavelength_limits: Option<(f64, f64)>,
     pub power_limits: Option<(f64, f64)>,
 }
@@ -529,7 +531,7 @@ fn watcher_callback<T: std::fmt::Debug>(
     last_spectrum: Arc<Mutex<Option<Spectrum>>>,
     new_spectrum: Arc<AtomicBool>,
     saving: Arc<AtomicBool>,
-    auto_save_path: &str,
+    auto_save_path: &Path,
     log_tx: Arc<SyncSender<Log>>
 ) -> Result<(), ()> {
     let event = match response {
@@ -581,8 +583,8 @@ fn watcher_callback<T: std::fmt::Debug>(
     Ok(())
 }
 
-fn auto_save_spectrum(spectrum: &Spectrum, folder_path: &str) -> Result<u32, Box<dyn Error>> {
-    let folder_path = Path::new(folder_path);
+fn auto_save_spectrum(spectrum: &Spectrum, folder_path: &Path) -> Result<u32, Box<dyn Error>> {
+    // let folder_path = Path::new(folder_path);
     fs::create_dir_all(folder_path)?;
 
     for i in 0..100_000 {

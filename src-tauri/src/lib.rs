@@ -90,8 +90,8 @@ pub fn write_config(config: &FileReaderConfig) -> Result<(), Box<dyn Error>> {
 
 pub fn default_config() -> FileReaderConfig {
     FileReaderConfig {
-        watcher_path: "D:/test/read".to_string(),
-        auto_save_path: "D:/test/save".to_string(),
+        watcher_path: "D:/test/read".to_string().into(),
+        auto_save_path: "D:/test/save".to_string().into(),
         wavelength_limits: None,
         power_limits: Some((-6.0, 1.0))
     }
