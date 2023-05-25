@@ -71,7 +71,6 @@ pub fn config_path() -> PathBuf {
     };
 
     let path = home.join(".config/rosa.toml");
-    println!("{}", path.display());
     path
 }
 
@@ -93,7 +92,7 @@ pub fn default_config() -> FileReaderConfig {
         watcher_path: "D:/test/read".to_string().into(),
         auto_save_path: "D:/test/save".to_string().into(),
         wavelength_limits: None,
-        power_limits: Some((-6.0, 1.0))
+        power_limits: None
     }
 }
 

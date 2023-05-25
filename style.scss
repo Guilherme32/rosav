@@ -322,12 +322,28 @@ button:active {
 
 .config input {
   background-color: $border;
-  width: 3rem;
+  width: 4rem;
   border: 2px solid $main_back;
   margin-right: 5px;
 }
 
 .config input:focus {
+  outline: none;
+}
+
+.config select {
+  background-color: $border;
+  width: 11rem;
+  border: 2px solid $main_back;
+  font-size: 0.75rem;
+}
+
+.config .select-selected {
+  background-color: $border;
+  color: $text;
+}
+
+.config select:focus {
   outline: none;
 }
 

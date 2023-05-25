@@ -219,10 +219,28 @@ pub fn get_back_config(reader: tauri::State<FileReader>) -> Option<FileReaderCon
     let config = match reader.config.lock() {
         Ok(config) => config,
         Err(_) => {
-            reader.log_error("[ABC] Falha ao obter lock para config".to_string());
+            reader.log_error("[AGB] Falha ao obter lock para config".to_string());
             return None;
         }
     };
 
     Some(config.clone())
+}
+
+#[tauri::command]
+pub fn apply_back_config(new_config: FileReaderConfig, reader: tauri::State<FileReader>) {
+    if let Err(error) = write_config(&new_config) {                            // write to file
+        reader.log_error(format!("[AAB] Não consegui escrever no arquivo de \
+            config. ({})", error));
+    };
+
+    let mut config = match reader.config.lock() {                              // Update live
+        Ok(config) => config,
+        Err(_) => {
+            reader.log_error("[AAB] Falha ao obter lock para config".to_string());
+            return ();
+        }
+    };
+
+    *config = new_config;
 }

@@ -2,6 +2,8 @@ use sycamore::prelude::*;
 use sycamore::futures::spawn_local_scoped;
 use gloo_timers::future::TimeoutFuture;
 
+// use std::path::PathBuf;
+
 use crate::api::*;
 use crate::trace::*;
 use crate::ActiveSide;
@@ -228,9 +230,28 @@ fn LogSpace<G:Html>(cx: Scope) -> View<G> {
 #[component]
 fn ConfigWindow<G:Html>(cx: Scope) -> View<G> {
     let config = create_signal(cx, empty_back_config());
-    spawn_local_scoped(cx, async move {
+
+    let wl_min = create_signal(cx, String::new());
+    let wl_max = create_signal(cx, String::new());
+
+    let pwr_min = create_signal(cx, String::new());
+    let pwr_max = create_signal(cx, String::new());
+
+    spawn_local_scoped(cx, async move {                // Get old config
         match get_back_config().await {
-            Some(_config) => config.set(_config),
+            Some(_config) => { 
+                if let Some(wl_limits) = _config.wavelength_limits {        // Update wl limits input
+                    wl_min.set(format!("{:.1}", wl_limits.0 * 1e9));
+                    wl_max.set(format!("{:.1}", wl_limits.1 * 1e9));
+                }
+
+                if let Some(pwr_limits) = _config.power_limits {            // Update pwr limits input
+                    pwr_min.set(format!("{}", pwr_limits.0));
+                    pwr_max.set(format!("{}", pwr_limits.1));
+                }
+
+                config.set(_config);                                        // Update whole config
+            }
             None => ()
         }
     });
@@ -261,20 +282,25 @@ fn ConfigWindow<G:Html>(cx: Scope) -> View<G> {
         format!("{}", (*config.get()).auto_save_path.display())
     });
 
-    let wl_min = create_signal(cx, String::from("100"));
-    let wl_max = create_signal(cx, String::new());
-
-    let test = move |x: sycamore::rt::Event| {
-        x.prevent_default();
-        spawn_local_scoped(cx, async move {
-            print_backend(&format!("{:?}", x)).await;
-        });
+    let update_limits = move |event: sycamore::rt::Event| {
+        event.prevent_default();
+        update_wavelength_limits(wl_min, wl_max, config);
+        update_power_limits(pwr_min, pwr_max, config);
     };
+
+    create_effect(cx, move || {                    // Apply config when it is updated
+        config.track();
+        spawn_local_scoped(cx, async move {
+            if *config.get() != empty_back_config() {
+                apply_back_config((*config.get()).clone()).await;
+            }
+        });
+    });
 
     view! { cx, 
         div(class="side-bar-main") {
             p(class="title") { "Configurações" }
-            form(class="side-container back config", on:submit=test) {
+            form(class="side-container back config", on:submit=update_limits) {
                 input(type="submit", style="display: none;")
 
                 p(class="mini-title") { "Backend Geral" }
@@ -291,18 +317,14 @@ fn ConfigWindow<G:Html>(cx: Scope) -> View<G> {
                     p { "Limites do comp. de onda:"}
                     p {
                         input(
-                            type="number",
-                            min="100",
-                            max="3000",
                             bind:value=wl_min,
-                            on:focusout=test
+                            on:input=|_| check_number_input(wl_min),
+                            on:focusout=update_limits
                         ) {}
                         input(
-                            type="number",
-                            min="100",
-                            max="3000",
                             bind:value=wl_max,
-                            on:focusout=test
+                            on:input=|_| check_number_input(wl_max),
+                            on:focusout=update_limits
                         ) {}
                         "(nm)"
                     }
@@ -312,20 +334,24 @@ fn ConfigWindow<G:Html>(cx: Scope) -> View<G> {
                     p { "Limites da potência:"}
                     p {
                         input(
-                            type="number",
-                            min="-100",
-                            max="100",
-                            bind:value=wl_max,
-                            on:focusout=test
+                            bind:value=pwr_min,
+                            on:input=|_| check_number_input(pwr_min),
+                            on:focusout=update_limits
                         ) {}
                         input(
-                            type="number",
-                            min="-100",
-                            max="100",
-                            bind:value=wl_max,
-                            on:focusout=test
+                            bind:value=pwr_max,
+                            on:input=|_| check_number_input(pwr_max),
+                            on:focusout=update_limits
                         ) {}
                         "(dB)"
+                    }
+                }
+
+                div(class="element") {
+                    p { "Tipo de aquisitor:" }
+                    select(name="acquisitor") {
+                        option(value="file_reader") { "Leitor de arquivos" }
+                        option(value="other") { "Outro de teste" }
                     }
                 }
 
@@ -343,5 +369,60 @@ fn ConfigWindow<G:Html>(cx: Scope) -> View<G> {
     }
 }
 
+fn update_wavelength_limits(
+    wl_min: &ReadSignal<String>,
+    wl_max: &ReadSignal<String>,
+    config: &Signal<FileReaderConfig>
+) {
+    let new_limits: Option<(f64, f64)>;
 
+    if wl_min.get().len() == 0 || wl_max.get().len() == 0 {
+        new_limits = None;
+    } else {
+        let min_float = wl_min.get().parse::<f64>();
+        let max_float = wl_max.get().parse::<f64>();
+
+        new_limits = match (min_float, max_float) {
+            (Ok(min), Ok(max)) => Some((min * 1e-9, max * 1e-9)),
+            (_, _) => None
+        };
+    }
+
+    if new_limits != config.get().wavelength_limits {
+        config.modify().wavelength_limits = new_limits;
+    }
+}
+
+fn update_power_limits(
+    pwr_min: &ReadSignal<String>,
+    pwr_max: &ReadSignal<String>,
+    config: &Signal<FileReaderConfig>
+) {
+    let new_limits: Option<(f64, f64)>;
+
+    if pwr_min.get().len() == 0 || pwr_max.get().len() == 0 {
+        new_limits = None;
+    } else {
+
+        let min_float = pwr_min.get().parse::<f64>();
+        let max_float = pwr_max.get().parse::<f64>();
+
+        new_limits = match (min_float, max_float) {
+            (Ok(min), Ok(max)) => Some((min, max)),
+            (_, _) => None
+        };
+    }
+
+    if new_limits != config.get().power_limits {
+        config.modify().power_limits = new_limits;
+    }
+}
+
+fn check_number_input(input: &Signal<String>) {
+    let mut temp_copy = (*input.get()).clone();
+    temp_copy.push_str("1");
+    if let Err(_) = temp_copy.parse::<f64>() {
+        input.set(String::new());
+    }
+}
 

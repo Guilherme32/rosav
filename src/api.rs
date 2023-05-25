@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]            // Tauri communication requires camelCase
+
 use wasm_bindgen::prelude::*;
 use serde::{Serialize, Deserialize};
 use serde_wasm_bindgen::{to_value, from_value};
@@ -187,7 +189,7 @@ pub async fn pick_folder() -> Option<PathBuf> {
     obj_rebuilt
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct FileReaderConfig {
     pub auto_save_path: PathBuf,
     pub watcher_path: PathBuf,
@@ -209,4 +211,13 @@ pub async fn get_back_config() -> Option<FileReaderConfig> {
     let obj_rebuilt: Option<FileReaderConfig> = from_value(from_back).unwrap();
 
     obj_rebuilt
+}
+
+#[derive(Serialize, Deserialize)]
+struct ConfigArgs {
+    newConfig: FileReaderConfig            // The tauri communication requires camelCase
+}
+
+pub async fn apply_back_config(newConfig: FileReaderConfig) {
+    invoke("apply_back_config", to_value(&ConfigArgs { newConfig }).unwrap()).await;
 }

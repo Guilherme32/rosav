@@ -66,6 +66,7 @@ fn main() {
             update_backend_config,
             pick_folder,
             get_back_config,
+            apply_back_config,
         ]).run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
