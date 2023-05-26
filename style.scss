@@ -113,6 +113,7 @@ body {
   color: $title;    /* white */
   text-align: center;
   padding: 1px;
+  font-size: 1rem;
 }
 
 .side-container {
@@ -306,6 +307,12 @@ button:active {
   margin: 5px 0px;
 }
 
+.config .mini-title p {
+  font-size: 0.85rem;
+  text-align: center;
+  color: $title;
+}
+
 .config button {
   width: 1.5rem;
   padding-left: 4px;
@@ -344,6 +351,7 @@ button:active {
 }
 
 .config select:focus {
+  border-color: $hard_back;
   outline: none;
 }
 

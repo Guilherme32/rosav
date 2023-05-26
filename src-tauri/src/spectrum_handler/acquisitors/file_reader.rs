@@ -19,12 +19,12 @@ use std::path::PathBuf;
 use serde::{Serialize, Deserialize};
 
 use crate::spectrum::*;
-use crate::spectrum_backend::State;
+use crate::spectrum_handler::{ State, SpectrumHandler };
 
 
 // Region: Main declarations ---------------------------------------------------
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FileReaderConfig {
     pub watcher_path: PathBuf
 }
@@ -37,6 +37,25 @@ pub struct FileReader {
 }
 
 
+// Region: Default generators --------------------------------------------------
+
+pub fn new_file_reader(
+    config: FileReaderConfig,
+    log_sender: SyncSender<Log>
+) -> FileReader {
+    FileReader {
+        state: Arc::new(Mutex::new(ReaderState::Disconnected)),
+        log_sender,
+        config: Mutex::new(config)
+    }
+}
+
+pub fn default_config() -> FileReaderConfig {
+    FileReaderConfig {
+        watcher_path: PathBuf::from("D:/test/read")                // TODO mudar pra ./
+    }
+}
+
 // Region Helper declarations --------------------------------------------------
 
 #[derive(Debug)]
@@ -46,22 +65,40 @@ pub enum ReaderState {
     Reading (notify::RecommendedWatcher)
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum FileReaderError {
+    #[error("Leitor já conectado")]
     ReaderAlreadyConnected,
+
+    #[error("Leitor já desconectado")]
     ReaderAlreadyDisconnected,
+
+    #[error("Caminho não existe")]
     PathDoesNotExist,
+
+    #[error("Caminho não é pasta ")]
     PathIsNotDir,
+
+    #[error("Permissão negada ao caminho")]
     PathWithoutPermission,
+
+    #[error("Leitor já está lendo")]
     ReaderAlreadyReading,
+
+    #[error("Erro interno da biblioteca Notify")]
     NotifyInternalError,
+
+    #[error("Leitor não está conectado")]
+    ReaderNotConnected,
+
+    #[error("Leitor não está lendo")]
     ReaderNotReading
 }
 
 // Region: required impls ------------------------------------------------------
 
 impl FileReader {
-    pub fn connect(&self) -> Result<(), ConnectError> {
+    pub fn connect(&self) -> Result<(), FileReaderError> {
         let mut state = self.state.lock().unwrap();
 
         match *state {
@@ -139,10 +176,11 @@ impl FileReader {
             _ => ()
         }
 
-        let config = handler.config.lock().unwrap();
+        let config = self.config.lock().unwrap();
+        let handler_config = handler.config.lock().unwrap();
 
         let watcher_path = Path::new(&config.watcher_path);
-        let auto_save_path = config.auto_save_path.clone();
+        let auto_save_path = handler_config.auto_save_path.clone();
 
         let spectrum_reference = Arc::clone(&handler.last_spectrum);
         let flag_reference = Arc::clone(&handler.unread_spectrum);
@@ -160,7 +198,7 @@ impl FileReader {
         ) {
             Ok(_) => (),
             Err(_) => {
-                let state = state_reference.lock().unwrap();
+                let mut state = state_reference.lock().unwrap();
                 *state = ReaderState::Disconnected;
                 log_war(&log_sender_clone, "[FSR] Aquisitor desconectado \
                     devido a um erro".to_string());
@@ -203,13 +241,45 @@ impl FileReader {
         let state = self.state.lock().unwrap();
 
         match *state {
-            FileReaderState::Connected => State::Connected,
-            FileReaderState::Disconnected => State::Disconnected,
-            FileReaderState::Reading(_) => State::Reading
+            ReaderState::Connected => State::Connected,
+            ReaderState::Disconnected => State::Disconnected,
+            ReaderState::Reading(_) => State::Reading
         }
     }
 }
 
+
+//Region: Config ---------------------------------------------------------------
+
+impl FileReader {
+    pub fn update_config(&self, new_config: FileReaderConfig) {
+        let mut config = self.config.lock().unwrap();
+
+        *config = new_config;
+    }
+
+    pub fn get_config(&self) -> FileReaderConfig {
+        let config = self.config.lock().unwrap();
+
+        (*config).clone()
+    }
+}
+
+// Region: Loggers -------------------------------------------------------------
+
+impl FileReader {
+    pub fn log_info(&self, msg: String) {
+        log_info(&self.log_sender, msg);
+    }
+
+    pub fn log_war(&self, msg: String) {
+        log_war(&self.log_sender, msg);
+    }
+
+    pub fn log_error(&self, msg: String) {
+        log_error(&self.log_sender, msg);
+    }
+}
 
 // Region: Outside impls -------------------------------------------------------
 
@@ -234,6 +304,24 @@ fn read_file_event(event: &notify::Event) -> Result<String, Box<dyn Error>> {
 
     // The only way it gets here is if error 32 happened 10 times in a row
     return Err(Box::new(io::Error::from_raw_os_error(32)));
+}
+
+fn auto_save_spectrum(
+    spectrum: &Spectrum,
+    folder_path: &Path
+) -> Result<u32, Box<dyn Error>> {
+    fs::create_dir_all(folder_path)?;
+
+    for i in 0..100_000 {
+        let new_path = folder_path.join(format!("spectrum{:03}.txt", i));
+        if !new_path.exists() {
+            spectrum.save(&new_path)?;
+            return Ok(i);
+        }
+    } 
+
+    Err(Box::new(io::Error::new(io::ErrorKind::Other, "Overflow de espectros,\
+        o programa só suporta até 'spectrum99999'")))
 }
 
 fn watcher_callback<T: std::fmt::Debug>(
@@ -279,7 +367,7 @@ fn watcher_callback<T: std::fmt::Debug>(
         }
     }
 
-    let last_spectrum = last_spectrum.lock().unwrap();
+    let mut last_spectrum = last_spectrum.lock().unwrap();
     *last_spectrum = Some(spectrum);
     new_spectrum.store(true, atomic::Ordering::Relaxed);
 

@@ -1,10 +1,18 @@
-use serde::{Serialize, Deserialize};
 use std::sync::{ atomic, Mutex, mpsc };
 use chrono::prelude::*;
 use tauri::api::dialog::{ FileDialogBuilder, blocking };
+use std::path::PathBuf;
 
 use crate::*;
-use file_reader::{ ReaderState, FileReader, FileReaderConfig };
+use spectrum_handler::{
+    State as HandlerState,
+    SpectrumHandler,
+    HandlerConfig,
+    AcquisitorConfig
+};
+
+use config::{ write_handler_config, write_acquisitor_config };
+
 
 #[tauri::command]
 pub fn hello() {
@@ -17,18 +25,18 @@ pub fn print_backend(msg: &str) {
 }
 
 #[tauri::command]
-pub fn unread_spectrum(reader: tauri::State<FileReader>) -> bool {
-    reader.unread_spectrum.load(atomic::Ordering::Relaxed)
+pub fn unread_spectrum(handler: tauri::State<SpectrumHandler>) -> bool {
+    handler.unread_spectrum.load(atomic::Ordering::Relaxed)
 }
 
 #[tauri::command]
 pub fn get_last_spectrum_path(
-    reader: tauri::State<FileReader>,
+    handler: tauri::State<SpectrumHandler>,
     window: tauri::Window
 ) -> String 
 {
-    reader.update_limits();
-    reader.get_last_spectrum_path(get_svg_size(window)).unwrap_or(String::new())
+    handler.update_limits();
+    handler.get_last_spectrum_path(get_svg_size(window)).unwrap_or(String::new())
 }
 
 #[tauri::command]
@@ -68,8 +76,8 @@ pub fn get_time() -> String {
 }
 
 #[tauri::command]
-pub fn get_wavelength_limits(reader: tauri::State<FileReader>) -> (f64, f64) {
-    let limits = reader.get_limits();
+pub fn get_wavelength_limits(handler: tauri::State<SpectrumHandler>) -> (f64, f64) {
+    let limits = handler.get_limits();
 
     if let Some(limits) = limits {
         limits.wavelength
@@ -79,8 +87,8 @@ pub fn get_wavelength_limits(reader: tauri::State<FileReader>) -> (f64, f64) {
 }
 
 #[tauri::command]
-pub fn get_power_limits(reader: tauri::State<FileReader>) -> (f64, f64) {
-    let limits = reader.get_limits();
+pub fn get_power_limits(handler: tauri::State<SpectrumHandler>) -> (f64, f64) {
+    let limits = handler.get_limits();
 
     if let Some(limits) = limits {
         (limits.power.1, limits.power.0)
@@ -90,34 +98,34 @@ pub fn get_power_limits(reader: tauri::State<FileReader>) -> (f64, f64) {
 }
 
 #[tauri::command]
-pub fn freeze_spectrum(reader: tauri::State<FileReader>) {
-    reader.freeze_spectrum();
+pub fn freeze_spectrum(handler: tauri::State<SpectrumHandler>) {
+    handler.freeze_spectrum();
 }
 
 #[tauri::command]
-pub fn delete_frozen_spectrum(id: usize, reader: tauri::State<FileReader>) {
-    reader.delete_frozen_spectrum(id);
+pub fn delete_frozen_spectrum(id: usize, handler: tauri::State<SpectrumHandler>) {
+    handler.delete_frozen_spectrum(id);
 }
 
 #[tauri::command]
 pub fn get_frozen_spectrum_path(
     id: usize,
-    reader: tauri::State<FileReader>,
+    handler: tauri::State<SpectrumHandler>,
     window: tauri::Window
 ) -> String {
-    reader.get_frozen_spectrum_path(id, get_svg_size(window))
+    handler.get_frozen_spectrum_path(id, get_svg_size(window))
         .unwrap_or(String::new())
 }
 
 #[tauri::command]
 pub fn save_frozen_spectrum(
     id: usize,
-    reader: tauri::State<FileReader>,
+    handler: tauri::State<SpectrumHandler>,
     window: tauri::Window
 ) {
-    let spectrum = reader.clone_frozen(id);
+    let spectrum = handler.clone_frozen(id);
     if let Some(spectrum) = spectrum {
-        let log_tx = reader.log_sender.clone();
+        let log_tx = handler.log_sender.clone();
 
         FileDialogBuilder::new()
             .add_filter("text", &["txt", ])
@@ -136,74 +144,45 @@ pub fn save_frozen_spectrum(
 }
 
 #[tauri::command]
-pub fn save_continuous(save: bool, reader:tauri::State<FileReader>) {
-    reader.saving_new.store(save, atomic::Ordering::Relaxed);
+pub fn save_continuous(save: bool, handler:tauri::State<SpectrumHandler>) {
+    handler.saving_new.store(save, atomic::Ordering::Relaxed);
 }
 
 #[tauri::command]
-pub fn get_saving(reader: tauri::State<FileReader>) -> bool {
-    reader.saving_new.load(atomic::Ordering::Relaxed)
-}
-
-
-#[derive(Serialize, Deserialize)]
-pub enum ConnectionState {
-    Disconnected,
-    Connected,
-    Reading
+pub fn get_saving(handler: tauri::State<SpectrumHandler>) -> bool {
+    handler.saving_new.load(atomic::Ordering::Relaxed)
 }
 
 #[tauri::command]
-pub fn get_connection_state(reader: tauri::State<FileReader>) -> Option<ConnectionState> {
-    let state = match reader.state.lock() {
-        Ok(state) => state,
-        Err(_) => {
-            reader.log_error("[MCN] Falha ao adquirir lock para 'state'".to_string());
-            return None;
-        }
-    };
-
-    match *state {
-        ReaderState::Disconnected => Some(ConnectionState::Disconnected),
-        ReaderState::Connected => Some(ConnectionState::Connected),
-        ReaderState::Reading(_) => Some(ConnectionState::Reading)
-    }
+pub fn get_connection_state(handler: tauri::State<SpectrumHandler>) -> HandlerState {
+    handler.get_state()
 }
 
 #[tauri::command]
-pub fn connect_acquisitor(reader: tauri::State<FileReader>) {
-    match reader.connect() {
+pub fn connect_acquisitor(handler: tauri::State<SpectrumHandler>) {
+    match handler.connect() {
         _ => ()
     }
 }
 
 #[tauri::command]
-pub fn disconnect_acquisitor(reader: tauri::State<FileReader>) {
-    match reader.disconnect() {
+pub fn disconnect_acquisitor(handler: tauri::State<SpectrumHandler>) {
+    match handler.disconnect() {
         _ => ()
     }
 }
 
 #[tauri::command]
-pub fn acquisitor_start_reading(reader: tauri::State<FileReader>) {
-    match reader.start_reading() {
+pub fn acquisitor_start_reading(handler: tauri::State<SpectrumHandler>) {
+    match handler.start_reading() {
         _ => ()
     }
 }
 
 #[tauri::command]
-pub fn acquisitor_stop_reading(reader: tauri::State<FileReader>) {
-    match reader.stop_reading() {
+pub fn acquisitor_stop_reading(handler: tauri::State<SpectrumHandler>) {
+    match handler.stop_reading() {
         _ => ()
-    }
-}
-
-#[tauri::command]
-pub fn update_backend_config(reader: tauri::State<FileReader>) {
-    match get_config() {
-        Ok(config) => reader.update_config(config),
-        Err(error) => reader.log_error(format!("[MUC] Não foi possível \
-            atualizar a config. ({})", error))
     }
 }
 
@@ -214,33 +193,39 @@ pub async fn pick_folder(window: tauri::Window) -> Option<PathBuf> {
         .pick_folder()
 }
 
-#[tauri::command]
-pub fn get_back_config(reader: tauri::State<FileReader>) -> Option<FileReaderConfig> {
-    let config = match reader.config.lock() {
-        Ok(config) => config,
-        Err(_) => {
-            reader.log_error("[AGB] Falha ao obter lock para config".to_string());
-            return None;
-        }
-    };
 
-    Some(config.clone())
+// Region: Config --------------------------------------------------------------
+//SubRegion: Handler config ----------------------------------------------------
+
+#[tauri::command]
+pub fn get_handler_config(handler: tauri::State<SpectrumHandler>) -> HandlerConfig {
+    handler.get_config()
 }
 
 #[tauri::command]
-pub fn apply_back_config(new_config: FileReaderConfig, reader: tauri::State<FileReader>) {
-    if let Err(error) = write_config(&new_config) {                            // write to file
-        reader.log_error(format!("[AAB] Não consegui escrever no arquivo de \
+pub fn apply_handler_config(new_config: HandlerConfig, handler: tauri::State<SpectrumHandler>) {
+    if let Err(error) = write_handler_config(&new_config) {                            // write to file
+        handler.log_error(format!("[AAB] Não consegui escrever no arquivo de \
             config. ({})", error));
     };
 
-    let mut config = match reader.config.lock() {                              // Update live
-        Ok(config) => config,
-        Err(_) => {
-            reader.log_error("[AAB] Falha ao obter lock para config".to_string());
-            return ();
-        }
+    handler.update_config(new_config);
+}
+
+
+//SubRegion: Acquisitor config -------------------------------------------------
+
+#[tauri::command]
+pub fn get_acquisitor_config(handler: tauri::State<SpectrumHandler>) -> AcquisitorConfig {
+    handler.get_acquisitor_config()
+}
+
+#[tauri::command]
+pub fn apply_acquisitor_config(new_config: AcquisitorConfig, handler: tauri::State<SpectrumHandler>) {
+    if let Err(error) = write_acquisitor_config(&new_config) {                            // write to file
+        handler.log_error(format!("[AAB] Não consegui escrever no arquivo de \
+            config. ({})", error));
     };
 
-    *config = new_config;
+    handler.update_acquisitor_config(new_config);
 }

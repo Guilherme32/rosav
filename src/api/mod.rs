@@ -7,6 +7,61 @@ use std::fmt;
 
 use std::path::PathBuf;
 
+pub mod acquisitors;
+use acquisitors::*;
+
+
+// Region: Returned structs definition
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub struct Log {
+    // pub id: u32,
+    pub msg: String,
+    pub log_type: LogType
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub enum LogType {
+    Info,
+    Warning,
+    Error
+}
+impl fmt::Display for LogType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match self {
+            LogType::Info => write!(f, "info"),
+            LogType::Warning => write!(f, "warning"),
+            LogType::Error => write!(f, "error")
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq)]
+pub enum ConnectionState {
+    Disconnected,
+    Connected,
+    Reading
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct HandlerConfig {
+    pub auto_save_path: PathBuf,
+    pub wavelength_limits: Option<(f64, f64)>,
+    pub power_limits: Option<(f64, f64)>,
+    pub acquisitor: acquisitors::AcquisitorSimple
+}
+
+
+pub fn empty_handler_config() -> HandlerConfig {
+    HandlerConfig {
+        auto_save_path: PathBuf::new(),
+        wavelength_limits: None,
+        power_limits: None,
+        acquisitor: AcquisitorSimple::FileReader
+    }
+}
+
+
 // API -------------------------------
 
 #[wasm_bindgen]
@@ -55,29 +110,6 @@ pub async fn get_svg_size() -> (i32, i32) {
     let obj_rebuilt: (i32, i32) = from_value(from_back).unwrap();
 
     obj_rebuilt
-}
-
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
-pub struct Log {
-    // pub id: u32,
-    pub msg: String,
-    pub log_type: LogType
-}
-
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
-pub enum LogType {
-    Info,
-    Warning,
-    Error
-}
-impl fmt::Display for LogType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        match self {
-            LogType::Info => write!(f, "info"),
-            LogType::Warning => write!(f, "warning"),
-            LogType::Error => write!(f, "error")
-        }
-    }
 }
 
 pub async fn get_last_logs() -> Vec::<Log> {
@@ -148,13 +180,6 @@ pub async fn get_saving() -> bool {
     obj_rebuilt
 }
 
-#[derive(Serialize, Deserialize, PartialEq)]
-pub enum ConnectionState {
-    Disconnected,
-    Connected,
-    Reading
-}
-
 pub async fn get_connection_state() -> Option<ConnectionState> {
     let from_back = invoke("get_connection_state", to_value(&()).unwrap()).await;
     let obj_rebuilt: Option<ConnectionState> = from_value(from_back).unwrap();
@@ -178,10 +203,6 @@ pub async fn acquisitor_stop_reading() {
     invoke("acquisitor_stop_reading", to_value(&()).unwrap()).await;
 }
 
-pub async fn update_backend_config() {
-    invoke("update_backend_config", to_value(&()).unwrap()).await;
-}
-
 pub async fn pick_folder() -> Option<PathBuf> {
     let from_back = invoke("pick_folder", to_value(&()).unwrap()).await;
     let obj_rebuilt: Option<PathBuf> = from_value(from_back).unwrap();
@@ -189,35 +210,38 @@ pub async fn pick_folder() -> Option<PathBuf> {
     obj_rebuilt
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub struct FileReaderConfig {
-    pub auto_save_path: PathBuf,
-    pub watcher_path: PathBuf,
-    pub wavelength_limits: Option<(f64, f64)>,
-    pub power_limits: Option<(f64, f64)>,
-}
-
-pub fn empty_back_config() -> FileReaderConfig {
-    FileReaderConfig {
-        auto_save_path: PathBuf::new(),
-        watcher_path: PathBuf::new(),
-        wavelength_limits: None,
-        power_limits: None
-    }
-}
-
-pub async fn get_back_config() -> Option<FileReaderConfig> {
-    let from_back = invoke("get_back_config", to_value(&()).unwrap()).await;
-    let obj_rebuilt: Option<FileReaderConfig> = from_value(from_back).unwrap();
+pub async fn get_handler_config() -> HandlerConfig {
+    let from_back = invoke("get_handler_config", to_value(&()).unwrap()).await;
+    let obj_rebuilt: HandlerConfig = from_value(from_back).unwrap();
 
     obj_rebuilt
 }
 
 #[derive(Serialize, Deserialize)]
-struct ConfigArgs {
-    newConfig: FileReaderConfig            // The tauri communication requires camelCase
+struct HandlerConfigArgs {
+    newConfig: HandlerConfig            // The tauri communication requires camelCase
 }
 
-pub async fn apply_back_config(newConfig: FileReaderConfig) {
-    invoke("apply_back_config", to_value(&ConfigArgs { newConfig }).unwrap()).await;
+pub async fn apply_handler_config(newConfig: HandlerConfig) {
+    invoke("apply_handler_config", to_value(&HandlerConfigArgs { newConfig }).unwrap()).await;
 }
+
+
+// SubRegion: Acquisitor config --------------------------------------------------------------------
+
+pub async fn get_acquisitor_config() -> AcquisitorConfig {
+    let from_back = invoke("get_acquisitor_config", to_value(&()).unwrap()).await;
+    let obj_rebuilt: AcquisitorConfig = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}
+
+#[derive(Serialize, Deserialize)]
+struct AcquisitorConfigArgs {
+    newConfig: AcquisitorConfig            // The tauri communication requires camelCase
+}
+
+pub async fn apply_acquisitor_config(newConfig: AcquisitorConfig) {
+    invoke("apply_acquisitor_config", to_value(&AcquisitorConfigArgs { newConfig }).unwrap()).await;
+}
+

@@ -1,10 +1,9 @@
-use sycamore::prelude::*;
+use sycamore::{ rt, prelude::* };
 use sycamore::futures::spawn_local_scoped;
 use gloo_timers::future::TimeoutFuture;
 
-// use std::path::PathBuf;
-
 use crate::api::*;
+use acquisitors::*;
 use crate::trace::*;
 use crate::ActiveSide;
 
@@ -199,14 +198,11 @@ fn LogSpace<G:Html>(cx: Scope) -> View<G> {
     let logs = create_signal(cx, Vec::<Log>::with_capacity(30));
 
     spawn_local_scoped(cx, async move {
-        // let mut count = 0u32;
         loop {
             TimeoutFuture::new(200).await;
             let new_logs = get_last_logs().await;
             for new_log in new_logs {
-                // new_log.id = count;
                 logs.modify().push(new_log);
-                // count += 1;
             }
         }
     });
@@ -220,7 +216,6 @@ fn LogSpace<G:Html>(cx: Scope) -> View<G> {
                     view = |cx, x| view! { cx,
                         p(class=x.log_type) { (x.msg) }
                     }
-                    // key = |x| (*x).id,
                 )
             }
         }
@@ -229,8 +224,26 @@ fn LogSpace<G:Html>(cx: Scope) -> View<G> {
 
 #[component]
 fn ConfigWindow<G:Html>(cx: Scope) -> View<G> {
-    let config = create_signal(cx, empty_back_config());
+    let handler_config = create_signal(cx, empty_handler_config());
 
+    view! { cx, 
+        div(class="side-bar-main") {
+            div(class="side-container back config") {
+                p(class="title") { "Configurações" }
+                RenderHandlerConfig (config=handler_config)
+                RenderAcquisitorConfig (handler_config=handler_config)
+            }
+        }
+    }
+}
+
+#[derive(Prop)]
+struct HandlerConfigProps<'a> {
+    config: &'a Signal<HandlerConfig>
+}
+
+#[component]
+fn RenderHandlerConfig<'a, G:Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>) -> View<G> {
     let wl_min = create_signal(cx, String::new());
     let wl_max = create_signal(cx, String::new());
 
@@ -238,131 +251,101 @@ fn ConfigWindow<G:Html>(cx: Scope) -> View<G> {
     let pwr_max = create_signal(cx, String::new());
 
     spawn_local_scoped(cx, async move {                // Get old config
-        match get_back_config().await {
-            Some(_config) => { 
-                if let Some(wl_limits) = _config.wavelength_limits {        // Update wl limits input
-                    wl_min.set(format!("{:.1}", wl_limits.0 * 1e9));
-                    wl_max.set(format!("{:.1}", wl_limits.1 * 1e9));
-                }
-
-                if let Some(pwr_limits) = _config.power_limits {            // Update pwr limits input
-                    pwr_min.set(format!("{}", pwr_limits.0));
-                    pwr_max.set(format!("{}", pwr_limits.1));
-                }
-
-                config.set(_config);                                        // Update whole config
-            }
-            None => ()
+        let _config = get_handler_config().await;
+        if let Some(wl_limits) = _config.wavelength_limits {        // Update wl limits input
+            wl_min.set(format!("{:.1}", wl_limits.0 * 1e9));
+            wl_max.set(format!("{:.1}", wl_limits.1 * 1e9));
         }
+
+        if let Some(pwr_limits) = _config.power_limits {            // Update pwr limits input
+            pwr_min.set(format!("{}", pwr_limits.0));
+            pwr_max.set(format!("{}", pwr_limits.1));
+        }
+
+        props.config.set(_config);                                        // Update whole config
     });
 
     let update_save_path = move |_| {
         spawn_local_scoped(cx, async move {
             match pick_folder().await {
                 None => (),
-                Some(path) => (*config.modify()).auto_save_path = path
+                Some(path) => (*props.config.modify()).auto_save_path = path
             }
         });
     };
-
-    let update_watcher_path = move |_| {
-        spawn_local_scoped(cx, async move {
-            match pick_folder().await {
-                None => (),
-                Some(path) => (*config.modify()).watcher_path = path
-            }
-        });
-    };
-
-    let watcher_path = create_memo(cx, || {
-        format!("{}", (*config.get()).watcher_path.display())
-    });
 
     let save_path = create_memo(cx, || {
-        format!("{}", (*config.get()).auto_save_path.display())
+        format!("{}", (*props.config.get()).auto_save_path.display())
     });
 
-    let update_limits = move |event: sycamore::rt::Event| {
+    let update_limits = move |event: rt::Event| {
         event.prevent_default();
-        update_wavelength_limits(wl_min, wl_max, config);
-        update_power_limits(pwr_min, pwr_max, config);
+        update_wavelength_limits(wl_min, wl_max, props.config);
+        update_power_limits(pwr_min, pwr_max, props.config);
     };
 
     create_effect(cx, move || {                    // Apply config when it is updated
-        config.track();
+        props.config.track();
         spawn_local_scoped(cx, async move {
-            if *config.get() != empty_back_config() {
-                apply_back_config((*config.get()).clone()).await;
+            if *props.config.get() != empty_handler_config() {
+                apply_handler_config((*props.config.get()).clone()).await;
             }
         });
     });
 
     view! { cx, 
-        div(class="side-bar-main") {
-            p(class="title") { "Configurações" }
-            form(class="side-container back config", on:submit=update_limits) {
-                input(type="submit", style="display: none;")
+        form(class="side-container back config", on:submit=update_limits) {
+            input(type="submit", style="display: none;")
 
-                p(class="mini-title") { "Backend Geral" }
+            p(class="mini-title") { "Backend Geral" }
 
-                div(class="element") {
-                    p { "Caminho do auto save:" }
-                    p { 
-                        button(on:click=update_save_path) { " " }
-                        (save_path.get())
-                    }
+            div(class="element") {
+                p { "Caminho do auto save:" }
+                p { 
+                    button(on:click=update_save_path) { " " }
+                    (save_path.get())
                 }
+            }
 
-                div(class="element") {
-                    p { "Limites do comp. de onda:"}
-                    p {
-                        input(
-                            bind:value=wl_min,
-                            on:input=|_| check_number_input(wl_min),
-                            on:focusout=update_limits
-                        ) {}
-                        input(
-                            bind:value=wl_max,
-                            on:input=|_| check_number_input(wl_max),
-                            on:focusout=update_limits
-                        ) {}
-                        "(nm)"
-                    }
+            div(class="element") {
+                p { "Limites do comp. de onda:"}
+                p {
+                    input(
+                        bind:value=wl_min,
+                        on:input=|_| check_number_input(wl_min),
+                        on:focusout=update_limits
+                    ) {}
+                    input(
+                        bind:value=wl_max,
+                        on:input=|_| check_number_input(wl_max),
+                        on:focusout=update_limits
+                    ) {}
+                    "(nm)"
                 }
+            }
 
-                div(class="element") {
-                    p { "Limites da potência:"}
-                    p {
-                        input(
-                            bind:value=pwr_min,
-                            on:input=|_| check_number_input(pwr_min),
-                            on:focusout=update_limits
-                        ) {}
-                        input(
-                            bind:value=pwr_max,
-                            on:input=|_| check_number_input(pwr_max),
-                            on:focusout=update_limits
-                        ) {}
-                        "(dB)"
-                    }
+            div(class="element") {
+                p { "Limites da potência:"}
+                p {
+                    input(
+                        bind:value=pwr_min,
+                        on:input=|_| check_number_input(pwr_min),
+                        on:focusout=update_limits
+                    ) {}
+                    input(
+                        bind:value=pwr_max,
+                        on:input=|_| check_number_input(pwr_max),
+                        on:focusout=update_limits
+                    ) {}
+                    "(dB)"
                 }
+            }
 
-                div(class="element") {
-                    p { "Tipo de aquisitor:" }
-                    select(name="acquisitor") {
-                        option(value="file_reader") { "Leitor de arquivos" }
-                        option(value="other") { "Outro de teste" }
-                    }
-                }
-
-                p(class="mini-title") { "Aquisitor" }
-
-                div(class="element") {
-                    p { "Caminho para vigiar:" }
-                    p { 
-                        button(on:click=update_watcher_path) { " " }
-                        (watcher_path.get())
-                    }
+            div(class="element") {
+                p { "Tipo de aquisitor:" }            // TODO implementar mudança quando passar o outro aquisitor
+                select(name="acquisitor") {
+                    option(value="file_reader") { "Leitor de arquivos" }
+                    option(value="other") { "Outro de teste" }
                 }
             }
         }
@@ -372,7 +355,7 @@ fn ConfigWindow<G:Html>(cx: Scope) -> View<G> {
 fn update_wavelength_limits(
     wl_min: &ReadSignal<String>,
     wl_max: &ReadSignal<String>,
-    config: &Signal<FileReaderConfig>
+    config: &Signal<HandlerConfig>
 ) {
     let new_limits: Option<(f64, f64)>;
 
@@ -396,7 +379,7 @@ fn update_wavelength_limits(
 fn update_power_limits(
     pwr_min: &ReadSignal<String>,
     pwr_max: &ReadSignal<String>,
-    config: &Signal<FileReaderConfig>
+    config: &Signal<HandlerConfig>
 ) {
     let new_limits: Option<(f64, f64)>;
 
@@ -423,6 +406,81 @@ fn check_number_input(input: &Signal<String>) {
     temp_copy.push_str("1");
     if let Err(_) = temp_copy.parse::<f64>() {
         input.set(String::new());
+    }
+}
+
+#[derive(Prop)]
+struct AcquisitorConfigProps<'a> {
+    handler_config: &'a Signal<HandlerConfig>
+}
+
+#[component]
+fn RenderAcquisitorConfig<'a, G:Html>(cx: Scope<'a>, props: AcquisitorConfigProps<'a>) -> View<G> {
+    view! { cx, 
+        (match props.handler_config.get().acquisitor {
+            AcquisitorSimple::FileReader => view! { cx, 
+                RenderFileReaderConfig {}
+            }
+        })
+    }
+}
+
+#[component]
+fn RenderFileReaderConfig<G:Html>(cx: Scope) -> View<G> {
+    let config = create_signal(cx, empty_file_reader_config());
+
+    spawn_local_scoped(cx, async move {                // Get old config
+        let _config = get_acquisitor_config().await;
+        if let AcquisitorConfig::FileReaderConfig(_config) = _config {
+            config.set(_config);
+        }
+    });
+
+    let update_watcher_path = move |event: rt::Event| {
+        event.prevent_default();
+        spawn_local_scoped(cx, async move {
+            match pick_folder().await {
+                None => (),
+                Some(path) => (*config.modify()).watcher_path = path
+            }
+        });
+    };
+
+    let watcher_path = create_memo(cx, || {
+        format!("{}", (*config.get()).watcher_path.display())
+    });
+
+    create_effect(cx, move || {                    // Apply config when it is updated
+        config.track();
+        spawn_local_scoped(cx, async move {
+            if *config.get() != empty_file_reader_config() {
+                apply_acquisitor_config(
+                    AcquisitorConfig::FileReaderConfig((*config.get()).clone())
+                ).await;
+            }
+        });
+    });
+
+    let do_nothing = |event: rt::Event| event.prevent_default();
+
+    view! { cx, 
+        form(on:submit=do_nothing) {
+            input(type="submit", style="display: none;")
+
+            p(class="mini-title") {
+                p { "Aquisitor" }
+                p { "(Leitor de Arquivos) "}
+            }
+
+            div(class="element") {
+                p { "Caminho para vigiar:" }
+                p { 
+                    button(on:click=update_watcher_path) { " " }
+                    (watcher_path.get())
+                }
+            }
+
+        }
     }
 }
 

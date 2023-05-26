@@ -55,12 +55,12 @@ pub fn trace_id_to_color(id: u8) -> String {
     if id > 8 {
         trace_id_to_color(id - 9)
     } else {
-                        // rYellow   dBlue      sRed       oViolet
-         let colors = vec!["#ff9e3b", "#658594", "#e82424", "#957fb8",
+                        // rYellow   cBlue      sRed       oViolet
+         let colors = vec!["#ff9e3b", "#7e9cd8", "#e82424", "#957fb8",
                         // wAqua      sPink      aGreen     kGray
                            "#7aa89f", "#d27e99", "#76946a", "#717c7c",
-                        // cBlue
-                           "#7e9cd8"];
+                        // sOrange
+                           "#ffa066"];
         format!("{}", colors[id as usize])
     }
 }

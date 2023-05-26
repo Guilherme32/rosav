@@ -11,35 +11,48 @@ use std::sync::{ Mutex, mpsc };
 // use tauri::api::dialog::FileDialogBuilder;
 
 use app::*;
-use app::api::*;
+use api::*;
+use config::*;
+
+use spectrum_handler::new_spectrum_handler;
 
 
 fn main() {
     let (log_tx, log_rx) = mpsc::sync_channel::<Log>(64);
     log_info(&log_tx, "[MST] Iniciando o programa".to_string());
 
-    let config = if config_path().exists() {
-        match get_config() {
-            Ok(config) => config,
-            Err(error) => {
-                log_war(&log_tx, format!("[MST] Não foi possível ler a config. \
-                    Usando a padrão. Erro: {}", error));
-                default_config()
-            } 
-        }
-    } else {
-        let config = default_config();
-        if let Err(error) = write_config(&config) {
-            log_error(&log_tx, format!("[MST] Não consegui criar o arquivo de \
-                config. ({})", error));
-        };
-        config
+    let handler_config = match load_handler_config() {
+        Ok(config) => config,
+        Err(error) => {
+            log_war(&log_tx, format!("[MST] Não foi possível ler a config. \
+                Usando a padrão. Erro: {}", error));
+            spectrum_handler::default_config()
+        } 
     };
+    let handler = new_spectrum_handler(handler_config, log_tx);
 
-    let reader = file_reader::new_file_reader(config, log_tx);
+    // let config = if config_path().exists() {
+    //     match get_config() {
+    //         Ok(config) => config,
+    //         Err(error) => {
+    //             log_war(&log_tx, format!("[MST] Não foi possível ler a config. \
+    //                 Usando a padrão. Erro: {}", error));
+    //             default_config()
+    //         } 
+    //     }
+    // } else {
+    //     let config = default_config();
+    //     if let Err(error) = write_config(&config) {
+    //         log_error(&log_tx, format!("[MST] Não consegui criar o arquivo de \
+    //             config. ({})", error));
+    //     };
+    //     config
+    // };
+
+    // let reader = file_reader::new_file_reader(config, log_tx);
 
     tauri::Builder::default()
-        .manage(reader)
+        .manage(handler)
         .manage(Mutex::new(log_rx))
         .invoke_handler(tauri::generate_handler![
             hello,
@@ -63,10 +76,11 @@ fn main() {
             disconnect_acquisitor,
             acquisitor_start_reading,
             acquisitor_stop_reading,
-            update_backend_config,
             pick_folder,
-            get_back_config,
-            apply_back_config,
+            get_handler_config,
+            apply_handler_config,
+            get_acquisitor_config,
+            apply_acquisitor_config,
         ]).run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
