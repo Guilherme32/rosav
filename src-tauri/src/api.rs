@@ -41,8 +41,14 @@ pub fn get_last_spectrum_path(
 
 #[tauri::command]
 pub fn get_window_size(window: tauri::Window) -> (u32, u32) {
-    let win_size = window.inner_size().expect("Could not get window size");            // TODO lidar com os erros
-    let scale = window.scale_factor().expect("Could not get window scale");
+    let win_size = match window.inner_size() {
+        Ok(size) => size,
+        Err(_) => return (0, 0)
+    };
+    let scale = match window.scale_factor() {
+        Ok(scale) => scale,
+        Err(_) => return (0, 0)
+    };
 
     (((win_size.width as f64) / scale).round() as u32, 
      ((win_size.height as f64) / scale).round() as u32)
@@ -50,8 +56,15 @@ pub fn get_window_size(window: tauri::Window) -> (u32, u32) {
 
 #[tauri::command]
 pub fn get_svg_size(window: tauri::Window) -> (u32, u32) {
-    let win_size = window.inner_size().expect("Could not get window size");            // TODO lidar com os erros
-    let scale = window.scale_factor().expect("Could not get window scale");
+    let win_size = match window.inner_size() {
+        Ok(size) => size,
+        Err(_) => return (0, 0)
+    };
+    let scale = match window.scale_factor() {
+        Ok(scale) => scale,
+        Err(_) => return (0, 0)
+    };
+
     let win_size_scaled = (((win_size.width as f64) / scale).round() as u32, 
                            ((win_size.height as f64) / scale).round() as u32);
 

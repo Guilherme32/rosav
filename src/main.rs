@@ -94,7 +94,7 @@ fn Main<G:Html>(cx: Scope) -> View<G> {
         }
     });
 
-    let active_side = create_signal(cx, ActiveSide::Config);            // TODO change back to traces
+    let active_side = create_signal(cx, ActiveSide::Traces);
 
     view!{ cx,
         div(class="horizontal-container") {
@@ -192,7 +192,7 @@ fn LowerBar<'a, G:Html>(cx: Scope<'a>, props: LowerBarProps<'a>) -> View<G> {
                     ConnectionState::Connected => 
                         view! { cx,
                             button(on:click=start_reading, class="no-offset") { " " }
-                            button(style="padding-right: 0.6rem;") { "󱑹 " }        // TODO put single read
+                            // button(style="padding-right: 0.6rem;") { "󱑹 " }        // TODO put single read
                             button(on:click=disconnect) { "󱐤 " }
                         },
                     ConnectionState::Reading =>

@@ -57,7 +57,7 @@ fn bezier_point(
     next: (f64, f64)
 ) -> String
 {
-    let smoothing = 0.1;            // #TODO to config
+    let smoothing = 0.3;
 
     let start_vector = (end.0 - previous.0, end.1 - previous.1);
     let start_control = (start.0 + start_vector.0 * smoothing,
@@ -94,8 +94,8 @@ impl Spectrum {
         let svg_limits = (svg_limits.0 as f64 - 40.0,
                           svg_limits.1 as f64 - 16.6);
 
-        let limits_pwr = (graph_limits.power.1, graph_limits.power.0);        // TODO to config
-        let limits_wl = graph_limits.wavelength;    // TODO opt config
+        let limits_pwr = (graph_limits.power.1, graph_limits.power.0);        // Invert because svg coords
+        let limits_wl = graph_limits.wavelength;
 
         if self.values.len() == 0 {
             return "".to_string();
@@ -105,10 +105,13 @@ impl Spectrum {
         let start = cvt(&self.values[0]);
         let start = format!("M {:.2},{:.2} ", start.0, start.1);
 
+        let last_entry = self.values.last().unwrap();            // The size is checked above
+
         let path = &self.values.iter()
             .skip(1)
+            .chain((0..3).map(|_| last_entry))        // Without this the end is cropped
             .map(cvt)
-            .tuple_windows()
+            .tuple_windows()                         // Cropped because of the window
             .map(|(a,b,c,d)| bezier_point(a, b, c, d))
             .collect::<String>();
         let path = format!("{start}{path}");

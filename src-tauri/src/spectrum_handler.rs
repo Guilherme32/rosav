@@ -62,7 +62,7 @@ pub enum Acquisitor {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum AcquisitorConfig {
     FileReaderConfig(FileReaderConfig),
-    Other(u32)                            // TODO just here to supress a warning
+    Other(u32)                            // TODO just here to supress a warning, remove when adding others
 }
 
 

@@ -52,7 +52,7 @@ pub fn new_file_reader(
 
 pub fn default_config() -> FileReaderConfig {
     FileReaderConfig {
-        watcher_path: PathBuf::from("D:/test/read")                // TODO mudar pra ./
+        watcher_path: PathBuf::from("./")
     }
 }
 

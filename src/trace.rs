@@ -51,7 +51,6 @@ pub fn trace_id_to_name(id: u8) -> String {
 }
 
 pub fn trace_id_to_color(id: u8) -> String {
-    // TODO passar essa função pro backend e pegar de um arquivo de configuração
     if id > 8 {
         trace_id_to_color(id - 9)
     } else {
