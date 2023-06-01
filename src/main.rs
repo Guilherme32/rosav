@@ -53,7 +53,7 @@ fn Main<G:Html>(cx: Scope) -> View<G> {
 
     spawn_local_scoped(cx, async move {
         loop {
-            TimeoutFuture::new(200).await;
+            TimeoutFuture::new(32).await;                // 30 fps, #TODO send to config
             let current_info = get_trace_info().await;
 
             if unread_spectrum().await {                // Get the latest spectrum if it is available
@@ -89,7 +89,7 @@ fn Main<G:Html>(cx: Scope) -> View<G> {
 
     spawn_local_scoped(cx, async move {
         loop {
-            TimeoutFuture::new(200).await;
+            TimeoutFuture::new(32).await;                // 30 fps, #TODO passar pra configsend to
             update_state(connection_state).await;
         }
     });

@@ -179,7 +179,7 @@ fn GraphLabels<'a, G:Html>(cx: Scope<'a>, props: LabelsProps<'a>) -> View<G> {
     let wl_limits = create_signal(cx, (1500f64, 1600f64));
     spawn_local_scoped(cx, async move {                                // Updates wl limits
         loop {
-            TimeoutFuture::new(200).await;
+            TimeoutFuture::new(32).await;                             // 30 fps, #TODO send to config
             let mut new_wl_limits = get_wavelength_limits().await;
             if new_wl_limits.0 < 1.0 {                             // If lower, it is in meters (~1e-6)
                 new_wl_limits = (new_wl_limits.0*1e9, new_wl_limits.1*1e9);        // To nanometers
@@ -205,7 +205,7 @@ fn GraphLabels<'a, G:Html>(cx: Scope<'a>, props: LabelsProps<'a>) -> View<G> {
     let pwr_limits = create_signal(cx, (3f64, -50f64));
     spawn_local_scoped(cx, async move {                        // Updates power limits
         loop {
-            TimeoutFuture::new(200).await;
+            TimeoutFuture::new(32).await;                          // 30 fps, #TODO send to config
             let new_pwr_limits = get_power_limits().await;
             if new_pwr_limits != *pwr_limits.get() {
                 pwr_limits.set(new_pwr_limits);
