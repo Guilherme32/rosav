@@ -18,6 +18,7 @@ pub mod acquisitors;
 
 use acquisitors::{
     file_reader::{ FileReader, FileReaderConfig },
+    ibsen_imon::{ Imon, ImonConfig },
     load_acquisitor
 };
 
@@ -51,18 +52,20 @@ pub enum State {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum AcquisitorSimple {
-    FileReader
+    FileReader,
+    Imon
 }
 
 #[derive(Debug)]
 pub enum Acquisitor {
-    FileReader(FileReader)
+    FileReader(FileReader),
+    Imon(Imon)
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum AcquisitorConfig {
     FileReaderConfig(FileReaderConfig),
-    Other(u32)                            // TODO just here to supress a warning, remove when adding others
+    ImonConfig(ImonConfig)
 }
 
 
@@ -72,7 +75,8 @@ impl SpectrumHandler {
     pub fn connect(&self) -> Result<(), Box<dyn Error>> {
         let acquisitor = self.acquisitor.lock().unwrap();
         match &*acquisitor {
-            Acquisitor::FileReader(file_reader) => file_reader.connect()?
+            Acquisitor::FileReader(file_reader) => file_reader.connect()?,
+            Acquisitor::Imon(imon) => imon.connect()?
         }
 
         Ok(())
@@ -81,7 +85,8 @@ impl SpectrumHandler {
     pub fn disconnect(&self) -> Result<(), Box<dyn Error>> {
         let acquisitor = self.acquisitor.lock().unwrap();
         match &*acquisitor {
-            Acquisitor::FileReader(file_reader) => file_reader.disconnect()?
+            Acquisitor::FileReader(file_reader) => file_reader.disconnect()?,
+            Acquisitor::Imon(imon) => imon.disconnect()?
         }
 
         Ok(())
@@ -90,7 +95,8 @@ impl SpectrumHandler {
     pub fn start_reading(&self) -> Result<(), Box<dyn Error>> {
         let acquisitor = self.acquisitor.lock().unwrap();
         match &*acquisitor {
-            Acquisitor::FileReader(file_reader) => file_reader.start_reading(self)?
+            Acquisitor::FileReader(file_reader) => file_reader.start_reading(self)?,
+            Acquisitor::Imon(imon) => imon.start_reading(self)?
         }
 
         Ok(())
@@ -99,7 +105,8 @@ impl SpectrumHandler {
     pub fn stop_reading(&self) -> Result<(), Box<dyn Error>> {
         let acquisitor = self.acquisitor.lock().unwrap();
         match &*acquisitor {
-            Acquisitor::FileReader(file_reader) => file_reader.stop_reading()?
+            Acquisitor::FileReader(file_reader) => file_reader.stop_reading()?,
+            Acquisitor::Imon(imon) => imon.stop_reading()?
         }
 
         Ok(())
@@ -108,7 +115,8 @@ impl SpectrumHandler {
     pub fn get_state(&self) -> State {
         let acquisitor = self.acquisitor.lock().unwrap();
         match &*acquisitor {
-            Acquisitor::FileReader(file_reader) => file_reader.get_simplified_state()
+            Acquisitor::FileReader(file_reader) => file_reader.get_simplified_state(),
+            Acquisitor::Imon(imon) => imon.get_simplified_state()
         }
     }
 }
@@ -336,6 +344,14 @@ impl SpectrumHandler {
                     self.log_error("[HUQ] Configuração incompatível, era esperado \
                         receber FileReaderConfig".to_string());
                 }
+            },
+            Acquisitor::Imon(imon) => {
+                if let AcquisitorConfig::ImonConfig(new_config) = new_config {
+                    imon.update_config(new_config);
+                } else {
+                    self.log_error("[HUQ] Configuração incompatível, era esperado \
+                        receber ImonConfig".to_string());
+                }
             }
         }
     }
@@ -345,7 +361,9 @@ impl SpectrumHandler {
 
         match &*acquisitor {
             Acquisitor::FileReader(file_reader) => 
-                AcquisitorConfig::FileReaderConfig(file_reader.get_config())
+                AcquisitorConfig::FileReaderConfig(file_reader.get_config()),
+            Acquisitor::Imon(imon) => 
+                AcquisitorConfig::ImonConfig(imon.get_config())
         }
     }
 }

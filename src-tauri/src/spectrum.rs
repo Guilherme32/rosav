@@ -74,6 +74,10 @@ fn bezier_point(
 }
 
 impl Spectrum {
+    pub fn empty() -> Spectrum {
+        Spectrum { values: vec![] }
+    }
+
     pub fn from_str(text: &str) -> Result<Spectrum, Box<dyn Error>> {
         let mut csv_reader = csv::ReaderBuilder::new()
             .delimiter(b';')
@@ -163,3 +167,29 @@ impl Spectrum {
     }
 }
 
+
+// For IBSEN IMON acquisitor
+impl Spectrum {
+    pub fn from_ibsen_imon(
+        pixel_readings: &[u32],
+        pixel_fit_coefficients: &[f64]
+    ) -> Spectrum {
+        let mut values: Vec<SpectrumValue> = Vec::new();
+
+        for (i, reading) in pixel_readings.iter().enumerate() {
+            let pwr: f64 = ((*reading as f64) / 409.6).log10();
+            let mut wl: f64 = 0.0;
+
+            for (j, coef) in pixel_fit_coefficients.iter().enumerate() {
+                wl += (i as f64).powf(j as f64) * coef;
+            }
+
+            values.push(SpectrumValue {
+                wavelength: wl,
+                power: pwr
+            });
+        }
+
+        Spectrum { values }
+    }
+}

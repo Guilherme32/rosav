@@ -373,8 +373,3 @@ fn watcher_callback<T: std::fmt::Debug>(
 
     Ok(())
 }
-
-
-
-
-
