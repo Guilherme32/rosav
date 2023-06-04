@@ -27,6 +27,8 @@ toml = "0.6"
 home = "0.5.5"
 thiserror = "1.0.40"
 
+serialport = "4.2.1"
+
 [features]
 # by default Tauri runs in production mode
 # when `tauri dev` runs it is executed with `cargo run --no-default-features` if `devPath` is an URL

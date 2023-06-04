@@ -164,12 +164,12 @@ impl FileReader {
 
         match *state {
             ReaderState::Disconnected => {
-                self.log_war("FSR Não foi possível começar a ler: Aquisitor \
+                self.log_war("[FSR] Não foi possível começar a ler: Aquisitor \
                     está desconectado".to_string());
                 return Err(FileReaderError::ReaderNotConnected);
             },
             ReaderState::Reading(_) => {
-                self.log_war("FSR Não foi possível começar aler: Aquisitor \
+                self.log_war("[FSR] Não foi possível começar aler: Aquisitor \
                     já está lendo".to_string());
                 return Err(FileReaderError::ReaderAlreadyReading);
             },

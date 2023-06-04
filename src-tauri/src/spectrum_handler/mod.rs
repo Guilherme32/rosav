@@ -1,4 +1,3 @@
-
 use crate::{ Log, log_info, log_error, log_war };
 
 use std::path::Path;
@@ -50,7 +49,7 @@ pub enum State {
     Reading
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum AcquisitorSimple {
     FileReader,
     Imon
@@ -323,6 +322,16 @@ pub fn default_config() -> HandlerConfig {
 impl SpectrumHandler {
     pub fn update_config(&self, new_config: HandlerConfig) {
         let mut config = self.config.lock().unwrap();
+
+        if new_config.acquisitor != config.acquisitor {
+            let mut acquisitor = self.acquisitor.lock().unwrap();
+            let new_acquisitor = load_acquisitor(
+                &new_config.acquisitor,
+                self.log_sender.clone()
+            );
+
+            *acquisitor = new_acquisitor;
+        }
 
         *config = new_config;
     }

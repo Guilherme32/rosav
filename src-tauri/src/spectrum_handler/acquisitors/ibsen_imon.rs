@@ -145,11 +145,26 @@ impl Imon {
             }
         }
 
-        let port = find_imon()?;
-        let connected_imon = parse_imon_parameters(port)?;
+        let port = match find_imon() {
+            Ok(found) => found,
+            Err(err) => {
+                self.log_war(format!("[ICN] Não foi possível conectar. IMON não encontrado
+                    ({})", err));
+                return Err(err);
+            }
+        };
+
+        let connected_imon = match parse_imon_parameters(port) {
+            Ok(parsed) => parsed,
+            Err(err) => {
+                self.log_war(format!("[ICN] Não foi possível conectar. Falha na extração
+                    dos parâmetros do IMON ({})", err));
+                return Err(err);
+            }
+        };
 
         *state = ImonState::Connected(connected_imon);
-        self.log_info("[FCN] Aquisitor conectado".to_string());
+        self.log_info("[ICN] Aquisitor conectado".to_string());
         Ok(())
     }
 
@@ -158,7 +173,7 @@ impl Imon {
 
         match &*state {
             ImonState::Disconnected => {
-                self.log_war("[FDN] Não foi possível desconectar: Aquisitor \
+                self.log_war("[IDN] Não foi possível desconectar: Aquisitor \
                     já está desconectado".to_string());
                 return Err(ImonError::ImonAlreadyConnected);
             },
@@ -166,7 +181,7 @@ impl Imon {
         }
 
         *state = ImonState::Disconnected;
-        self.log_info("[FDN] Aquisitor desconectado".to_string());
+        self.log_info("[IDN] Aquisitor desconectado".to_string());
         Ok(())
     }
 
@@ -178,12 +193,12 @@ impl Imon {
 
         match &mut *state {
             ImonState::Disconnected => {
-                self.log_war("FSR Não foi possível começar a ler: Aquisitor \
+                self.log_war("[ISR] Não foi possível começar a ler: Aquisitor \
                     está desconectado".to_string());
                 return Err(ImonError::ImonNotConnected);
             },
             ImonState::Reading(_) => {
-                self.log_war("FSR Não foi possível começar a ler: Aquisitor \
+                self.log_war("[ISR] Não foi possível começar a ler: Aquisitor \
                     já está lendo".to_string());
                 return Err(ImonError::ImonAlreadyReading);
             },
@@ -238,11 +253,11 @@ impl Imon {
         match &*state {
             ImonState::Reading(reading_imon) => {
                 *state = ImonState::Connected(reading_imon.connected_imon.clone());
-                self.log_info("[FTP] Aquisitor parou de ler".to_string());
+                self.log_info("[ITP] Aquisitor parou de ler".to_string());
                 Ok(())
             },
             _ => {
-                self.log_war("[FTP] Não foi possível parar de ler, o aquisitor \
+                self.log_war("[ITP] Não foi possível parar de ler, o aquisitor \
                     não estava lendo".to_string());
                 Err(ImonError::ImonNotReading)
             }
@@ -327,6 +342,7 @@ fn is_imon(port: SerialPortInfo) -> Result<Box<dyn SerialPort>, Box<dyn Error>> 
 
             // TODO check if ID matches here
             if response.len() != 0 {
+                println!("Resposta do *IDN: \n{}", response);            // TODO remove
                 return Ok(port);
             }
         },
@@ -345,6 +361,8 @@ fn parse_imon_parameters(
     let mut buffer: [u8; 4096] = [0; 4096];
     port.read(&mut buffer)?;
     let response = String::from_utf8_lossy(&buffer);
+
+    println!("Response from *para:basic: \n{}", response);            // TODO remove
 
     let mut n_pixels: Option<u32> = None;
     let mut fit_coefficients: Vec<f64> = vec![];
@@ -505,7 +523,7 @@ fn auto_save_spectrum(
             spectrum.save(&new_path)?;
             return Ok(i);
         }
-    } 
+    }
 
     Err(Box::new(io::Error::new(io::ErrorKind::Other, "Overflow de espectros,\
         o programa só suporta até 'spectrum99999'")))

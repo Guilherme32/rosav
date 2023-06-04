@@ -7,6 +7,9 @@ use acquisitors::*;
 use crate::trace::*;
 use crate::ActiveSide;
 
+mod acquisitor_config_renders;
+use acquisitor_config_renders::*;
+
 
 #[derive(Prop)]
 pub struct SideBarProps<'a> {
@@ -250,6 +253,8 @@ fn RenderHandlerConfig<'a, G:Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>)
     let pwr_min = create_signal(cx, String::new());
     let pwr_max = create_signal(cx, String::new());
 
+    let acquisitor = create_signal(cx, String::new());
+
     spawn_local_scoped(cx, async move {                // Get old config
         let _config = get_handler_config().await;
         if let Some(wl_limits) = _config.wavelength_limits {        // Update wl limits input
@@ -260,6 +265,11 @@ fn RenderHandlerConfig<'a, G:Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>)
         if let Some(pwr_limits) = _config.power_limits {            // Update pwr limits input
             pwr_min.set(format!("{}", pwr_limits.0));
             pwr_max.set(format!("{}", pwr_limits.1));
+        }
+
+        match _config.acquisitor {
+            AcquisitorSimple::FileReader => acquisitor.set("file_reader".to_string()),
+            AcquisitorSimple::Imon => acquisitor.set("imon".to_string())
         }
 
         props.config.set(_config);                                        // Update whole config
@@ -282,6 +292,16 @@ fn RenderHandlerConfig<'a, G:Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>)
         event.prevent_default();
         update_wavelength_limits(wl_min, wl_max, props.config);
         update_power_limits(pwr_min, pwr_max, props.config);
+    };
+
+    let acquisitor_select = move |_| {
+        match (*acquisitor.get()).as_str() {
+            "file_reader" =>
+                (*props.config.modify()).acquisitor = AcquisitorSimple::FileReader,
+            "imon" =>
+                (*props.config.modify()).acquisitor = AcquisitorSimple::Imon,
+            _ => ()
+        }
     };
 
     create_effect(cx, move || {                    // Apply config when it is updated
@@ -343,9 +363,13 @@ fn RenderHandlerConfig<'a, G:Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>)
 
             div(class="element") {
                 p { "Tipo de aquisitor:" }            // TODO implementar mudança quando passar o outro aquisitor
-                select(name="acquisitor") {
+                select(
+                    name="acquisitor",
+                    bind:value=acquisitor,
+                    on:input=acquisitor_select
+                ) {
                     option(value="file_reader") { "Leitor de arquivos" }
-                    option(value="other") { "Outro de teste" }
+                    option(value="imon") { "Ibsen IMON" }
                 }
             }
         }
@@ -420,67 +444,11 @@ fn RenderAcquisitorConfig<'a, G:Html>(cx: Scope<'a>, props: AcquisitorConfigProp
         (match props.handler_config.get().acquisitor {
             AcquisitorSimple::FileReader => view! { cx, 
                 RenderFileReaderConfig {}
+            },
+            AcquisitorSimple::Imon => view! { cx, 
+                RenderImonConfig {}
             }
         })
-    }
-}
-
-#[component]
-fn RenderFileReaderConfig<G:Html>(cx: Scope) -> View<G> {
-    let config = create_signal(cx, empty_file_reader_config());
-
-    spawn_local_scoped(cx, async move {                // Get old config
-        let _config = get_acquisitor_config().await;
-        if let AcquisitorConfig::FileReaderConfig(_config) = _config {
-            config.set(_config);
-        }
-    });
-
-    let update_watcher_path = move |event: rt::Event| {
-        event.prevent_default();
-        spawn_local_scoped(cx, async move {
-            match pick_folder().await {
-                None => (),
-                Some(path) => (*config.modify()).watcher_path = path
-            }
-        });
-    };
-
-    let watcher_path = create_memo(cx, || {
-        format!("{}", (*config.get()).watcher_path.display())
-    });
-
-    create_effect(cx, move || {                    // Apply config when it is updated
-        config.track();
-        spawn_local_scoped(cx, async move {
-            if *config.get() != empty_file_reader_config() {
-                apply_acquisitor_config(
-                    AcquisitorConfig::FileReaderConfig((*config.get()).clone())
-                ).await;
-            }
-        });
-    });
-
-    let do_nothing = |event: rt::Event| event.prevent_default();
-
-    view! { cx, 
-        form(on:submit=do_nothing) {
-            input(type="submit", style="display: none;")
-
-            p(class="mini-title") {
-                p { "Aquisitor" }
-                p { "(Leitor de Arquivos) "}
-            }
-
-            div(class="element") {
-                p { "Caminho para vigiar:" }
-                p { 
-                    button(on:click=update_watcher_path) { " " }
-                    (watcher_path.get())
-                }
-            }
-
-        }
     }
 }
 
