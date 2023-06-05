@@ -44,7 +44,10 @@
       "windows": {
         "certificateThumbprint": null,
         "digestAlgorithm": "sha256",
-        "timestampUrl": ""
+        "timestampUrl": "",
+        "webviewInstallMode": {
+          "type": "embedBootstrapper"
+        }
       }
     },
     "security": {
@@ -58,7 +61,7 @@
         "fullscreen": false,
         "height": 500,
         "resizable": true,
-        "title": "Osa",
+        "title": "Rosa",
         "width": 1000,
         "minHeight": 400,
         "minWidth": 700
