@@ -330,7 +330,7 @@ fn is_imon(port: SerialPortInfo) -> Result<Box<dyn SerialPort>, Box<dyn Error>> 
      match port.port_type {
         UsbPort(_) => {
             let mut port = new(port.port_name, 921_000)
-                .timeout(Duration::from_millis(5))
+                .timeout(Duration::from_millis(100))
                 .open()?;
 
             port.clear(ClearBuffer::Input)?;
@@ -425,32 +425,39 @@ fn constant_read(
             Err(TryRecvError::Disconnected) => break
         }
 
-        match get_spectrum(
-            &mut *port,
-            &config,
-            n_pixels,
-            &pixel_fit_coefficients
-        ) {
-            Ok(spectrum) => {
-                if saving.load(Ordering::Relaxed) {
-                    let _ = auto_save_spectrum(&spectrum, &auto_save_path);
+        for i in 0..10 {                        // Tries to get the spectrum 10 times
+            match get_spectrum(
+                &mut *port,
+                &config,
+                n_pixels,
+                &pixel_fit_coefficients
+            ) {
+                Ok(spectrum) => {
+                    if saving.load(Ordering::Relaxed) {
+                        let _ = auto_save_spectrum(&spectrum, &auto_save_path);
+                    }
+                    let mut last_spectrum = last_spectrum.lock().unwrap();
+                    *last_spectrum = Some(spectrum);
+                    new_spectrum.store(true, Ordering::Relaxed);
+
+                    continue;
+                },
+                Err(error) => {
+                    log_error(&log_tx, format!("[IRS] {}/10 Erro na acquisição \
+                        do espectro: {}", i + 1, error));
+
+                    if i == 9 {
+                        log_war(&log_tx, format!("[IRS] Aquisitor desconectado devido \
+                            a um erro"));
+                        let mut state = state.lock().unwrap();
+                        *state = ImonState::Disconnected;
+
+                        return ();
+                    }
                 }
-                let mut last_spectrum = last_spectrum.lock().unwrap();
-                *last_spectrum = Some(spectrum);
-                new_spectrum.store(true, Ordering::Relaxed);
-            },
-            Err(error) => {
-                log_error(&log_tx, format!("[IRS] Erro na acquisição \
-                    do espectro: {}", error));
-                log_war(&log_tx, format!("[IRS] Aquisitor desconectado devido \
-                    a um erro"));
-                let mut state = state.lock().unwrap();
-                *state = ImonState::Disconnected;
-                break;
             }
         }
     }
-    
 }
 
 fn get_spectrum(
@@ -470,6 +477,7 @@ fn get_spectrum(
 
     let mut buffer_single: [u8; 1] = [0; 1];
     port.read_exact(&mut buffer_single)?;
+    println!("First byte from *meas: \n{:x}", buffer_single[0]);            // TODO remove
 
     if buffer_single[0] == 0x15 {
         return Err(Box::new(ImonError::CommandNack));
