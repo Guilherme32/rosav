@@ -34,7 +34,8 @@ use crate::spectrum_handler::{ State, SpectrumHandler };
 pub struct ImonConfig {
     pub multisampling: u64,
     pub exposure_ms: u64,
-    pub read_delay_ms: u64
+    pub read_delay_ms: u64,
+    pub calibration: ImonCalibration
 }
 
 #[derive(Debug)]
@@ -62,11 +63,24 @@ pub fn default_config() -> ImonConfig {
     ImonConfig {
         multisampling: 1,
         exposure_ms: 10,
-        read_delay_ms: 100
+        read_delay_ms: 100,
+        calibration: ImonCalibration {
+            wavelength_fit: [1.596227e3,   -1.380588e-1,
+                             -6.197645e-5, -5.290868e-9,
+                             4.363884e-12, -3.879178e-15],
+            temperature_coeffs: [1.593802e-6,  -2.178398e-5,
+                                 -3.364313e-3, 5.350232e-2]
+        }
     }
 }
 
 // Region Helper declarations --------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImonCalibration {
+    pub wavelength_fit: [f64; 6],
+    pub temperature_coeffs: [f64; 4]
+}
 
 #[derive(Debug)]
 enum ImonState {
@@ -78,8 +92,7 @@ enum ImonState {
 #[derive(Debug, Clone)]
 struct ConnectedImon {
     port: Arc<Mutex<Box<dyn SerialPort>>>,
-    n_pixels: u32,
-    pixel_fit_coefficients: Vec<f64>
+    n_pixels: u32
 }
 
 #[derive(Debug)]
@@ -220,7 +233,6 @@ impl Imon {
 
                 let port_reference = Arc::clone(&connected_imon.port);
                 let n_pixels = connected_imon.n_pixels;
-                let pixel_fit_coefs_clone = connected_imon.pixel_fit_coefficients.clone();
 
                 thread::spawn(move || {
                     constant_read(
@@ -233,7 +245,6 @@ impl Imon {
                         config_rx,
                         port_reference,
                         n_pixels,
-                        pixel_fit_coefs_clone
                     );
                 });
 
@@ -334,7 +345,7 @@ fn is_imon(port: SerialPortInfo) -> Result<Box<dyn SerialPort>, Box<dyn Error>> 
                 .open()?;
 
             port.clear(ClearBuffer::Input)?;
-            port.write(b"*IDN\r")?;
+            port.write(b"*IDN?\r")?;
         
             let mut buffer: [u8; 1024] = [0;1024];
             port.read(&mut buffer)?;
@@ -342,8 +353,9 @@ fn is_imon(port: SerialPortInfo) -> Result<Box<dyn SerialPort>, Box<dyn Error>> 
 
             // TODO check if ID matches here
             if response.len() != 0 {
-                println!("Resposta do *IDN: \n{}", response);            // TODO remove
-                return Ok(port);
+                if response.contains("JETI_VersaPIC_RU60") {
+                    return Ok(port);
+                }
             }
         },
         _ => ()
@@ -362,10 +374,7 @@ fn parse_imon_parameters(
     port.read(&mut buffer)?;
     let response = String::from_utf8_lossy(&buffer);
 
-    println!("Response from *para:basic: \n{}", response);            // TODO remove
-
     let mut n_pixels: Option<u32> = None;
-    let mut fit_coefficients: Vec<f64> = vec![];
 
     for line in response.split('\r') {
         let line = line.replace('\n', "");
@@ -377,25 +386,13 @@ fn parse_imon_parameters(
                 n_pixels = Some(_n_pixels);
             }
         }
-
-        let coef_index = fit_coefficients.len();
-        let expected_fit_coef = format!("channel0fitx^{}:", coef_index);
-
-        if let Some(coef) = line.strip_prefix(&expected_fit_coef) {
-            if let Ok(coef) = coef.parse::<f64>() {
-                fit_coefficients.push(coef * 1e-9);
-            }
-        }
     }
 
     if let Some(n_pixels) = n_pixels {
-        if fit_coefficients.len() >= 5 {
-            return Ok(ConnectedImon {
-                port: Arc::new(Mutex::new(port)),
-                n_pixels,
-                pixel_fit_coefficients: fit_coefficients
-            })
-        }
+        return Ok(ConnectedImon {
+            port: Arc::new(Mutex::new(port)),
+            n_pixels
+        })
     }
 
     Err(Box::new(ImonError::ParseError))
@@ -410,8 +407,7 @@ fn constant_read(
     state: Arc<Mutex<ImonState>>,
     config_rx: Receiver<ImonConfig>,
     port: Arc<Mutex<Box<dyn SerialPort>>>,
-    n_pixels: u32,
-    pixel_fit_coefficients: Vec<f64>,
+    n_pixels: u32
 ) {
     let mut config = default_config();
     loop {
@@ -430,7 +426,7 @@ fn constant_read(
                 &mut *port,
                 &config,
                 n_pixels,
-                &pixel_fit_coefficients
+                &config.calibration
             ) {
                 Ok(spectrum) => {
                     if saving.load(Ordering::Relaxed) {
@@ -464,7 +460,7 @@ fn get_spectrum(
     port: &mut Box<dyn SerialPort>,
     config: &ImonConfig,
     n_pixels: u32,
-    pixel_fit_coefficients: &Vec<f64>
+    calibration: &ImonCalibration
 ) -> Result<Spectrum, Box<dyn Error>> {
     let command = format!(
         "*meas {} {} 3\r",            // *meas tint av format<CR>
@@ -476,21 +472,34 @@ fn get_spectrum(
     port.write(&command)?;
 
     let mut buffer_single: [u8; 1] = [0; 1];
-    port.read_exact(&mut buffer_single)?;
-    println!("First byte from *meas: \n{:x}", buffer_single[0]);            // TODO remove
 
-    if buffer_single[0] == 0x15 {
-        return Err(Box::new(ImonError::CommandNack));
-    }
-    if buffer_single[0] != 0x07 {
-        return Err(Box::new(ImonError::UnexpectedResponse));
+    'check_ack: {                        // Searches for the ack in up to 100 bytes
+        for _ in 0..100 {
+            port.read_exact(&mut buffer_single)?;
+
+            if buffer_single[0] == 0x15 {                // Found nack
+                return Err(Box::new(ImonError::CommandNack));
+            }
+            if buffer_single[0] == 0x06 {                // Found nack
+                break 'check_ack;
+            }
+        }
+
+        return Err(Box::new(ImonError::UnexpectedResponse));        // Found neither
     }
 
     sleep(Duration::from_millis(config.multisampling*config.exposure_ms));
-    port.read_exact(&mut buffer_single)?;
 
-    if buffer_single[0] != 0x07 {
-        return Err(Box::new(ImonError::UnexpectedResponse));
+    'check_bell: {                        // Searches for the bell (reading complete)
+        for _ in 0..1000 {
+            port.read_exact(&mut buffer_single)?;
+
+            if buffer_single[0] == 0x07 {                // Found nack
+                break 'check_bell;
+            }
+        }
+
+        return Err(Box::new(ImonError::UnexpectedResponse));        // Did not find it
     }
 
     let mut buffer_two: [u8; 2] = [0; 2];
@@ -516,7 +525,11 @@ fn get_spectrum(
     println!("bit_sum: {}", bit_sum);
     println!("checksum: {}", checksum);            // TODO remove after testing
 
-    Ok(Spectrum::from_ibsen_imon(&pixel_readings, pixel_fit_coefficients))
+    Ok(Spectrum::from_ibsen_imon(
+        &pixel_readings,
+        25.0,                    // TODO pegar a temperatura
+        calibration
+    ))
 }
 
 fn auto_save_spectrum(
@@ -537,3 +550,39 @@ fn auto_save_spectrum(
         o programa só suporta até 'spectrum99999'")))
 }
 
+
+// Region: Spectrum creation ---------------------------------------------------
+
+impl Spectrum {
+    pub fn from_ibsen_imon(
+        pixel_readings: &[u32],
+        temperature: f64,
+        calibration: &ImonCalibration
+    ) -> Spectrum {
+        let t_alpha = calibration.temperature_coeffs[0];
+        let t_alpha_0 = calibration.temperature_coeffs[1];
+        let t_beta = calibration.temperature_coeffs[2];
+        let t_beta_0 = calibration.temperature_coeffs[3];
+
+        let mut values: Vec<SpectrumValue> = Vec::new();
+
+        for (pixel, reading) in pixel_readings.iter().enumerate() {
+            let pwr: f64 = ((*reading as f64) / 409.6).log10();
+            let mut wl: f64 = 0.0;
+
+            for (j, coef) in calibration.wavelength_fit.iter().enumerate() {
+                wl += (pixel as f64).powf(j as f64) * coef;
+            }
+
+            wl = (wl - t_beta * temperature - t_beta_0)
+                 / (1.0 + t_alpha * temperature + t_alpha_0);
+
+            values.push(SpectrumValue {
+                wavelength: wl,
+                power: pwr
+            });
+        }
+
+        Spectrum { values }
+    }
+}

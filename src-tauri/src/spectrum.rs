@@ -9,14 +9,14 @@ use std::path::Path;
 use itertools::Itertools;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct SpectrumValue {
-    wavelength: f64,
-    power: f64
+pub struct SpectrumValue {
+    pub wavelength: f64,
+    pub power: f64
 }
 
 #[derive(Debug, Clone)]
 pub struct Spectrum {
-    values: Vec<SpectrumValue>
+    pub values: Vec<SpectrumValue>
 }
 
 #[derive(Debug, Clone)]
@@ -167,29 +167,3 @@ impl Spectrum {
     }
 }
 
-
-// For IBSEN IMON acquisitor
-impl Spectrum {
-    pub fn from_ibsen_imon(
-        pixel_readings: &[u32],
-        pixel_fit_coefficients: &[f64]
-    ) -> Spectrum {
-        let mut values: Vec<SpectrumValue> = Vec::new();
-
-        for (i, reading) in pixel_readings.iter().enumerate() {
-            let pwr: f64 = ((*reading as f64) / 409.6).log10();
-            let mut wl: f64 = 0.0;
-
-            for (j, coef) in pixel_fit_coefficients.iter().enumerate() {
-                wl += (i as f64).powf(j as f64) * coef;
-            }
-
-            values.push(SpectrumValue {
-                wavelength: wl,
-                power: pwr
-            });
-        }
-
-        Spectrum { values }
-    }
-}
