@@ -416,7 +416,10 @@ fn constant_read(
         let mut port = port.lock().unwrap();
 
         match config_rx.try_recv() {
-            Ok(new_config) => config = new_config,
+            Ok(new_config) => {
+                config = new_config;
+                println!("Updated config: {:?}", config);
+            },
             Err(TryRecvError::Empty) => (),
             Err(TryRecvError::Disconnected) => break
         }
@@ -612,11 +615,12 @@ impl Spectrum {
                  / (1.0 + t_alpha * temperature + t_alpha_0);
 
             values.push(SpectrumValue {
-                wavelength: wl,
+                wavelength: wl * 1e-9,
                 power: pwr
             });
         }
 
+        let values = values.into_iter().rev().collect();
         Spectrum { values }
     }
 }

@@ -1,8 +1,10 @@
+use std::panic;
+
 use sycamore::prelude::*;
 // use itertools::Itertools;
 // use std::iter;
 
-use sycamore::futures::spawn_local_scoped;
+use sycamore::futures::{ spawn_local_scoped, spawn_local };
 
 use gloo_timers::future::TimeoutFuture;
 
@@ -20,6 +22,14 @@ use side_bar::*;
 
 
 fn main() {
+
+    panic::set_hook(Box::new(|reason| {
+        let reason = format!("PANIC!!!! -> {}", reason);
+        spawn_local(async move {
+            print_backend(&reason).await;
+        });
+    }));
+
     sycamore::render(|cx| view!{ cx,
         Main {}
     })
@@ -53,7 +63,7 @@ fn Main<G:Html>(cx: Scope) -> View<G> {
 
     spawn_local_scoped(cx, async move {
         loop {
-            TimeoutFuture::new(200).await;                // 30 fps, #TODO send to config
+            TimeoutFuture::new(200).await;                // 5 fps, #TODO send to config
             let current_info = get_trace_info().await;
 
             if unread_spectrum().await {                // Get the latest spectrum if it is available
@@ -89,7 +99,7 @@ fn Main<G:Html>(cx: Scope) -> View<G> {
 
     spawn_local_scoped(cx, async move {
         loop {
-            TimeoutFuture::new(200).await;                // 30 fps, #TODO passar pra configsend to
+            TimeoutFuture::new(200).await;                // 5 fps, #TODO passar pra configsend to
             update_state(connection_state).await;
         }
     });
