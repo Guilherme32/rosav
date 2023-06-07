@@ -473,20 +473,7 @@ fn get_spectrum(
 
     let mut buffer_single: [u8; 1] = [0; 1];
 
-    'check_ack: {                        // Searches for the ack in up to 100 bytes
-        for _ in 0..100 {
-            port.read_exact(&mut buffer_single)?;
-
-            if buffer_single[0] == 0x15 {                // Found nack
-                return Err(Box::new(ImonError::CommandNack));
-            }
-            if buffer_single[0] == 0x06 {                // Found nack
-                break 'check_ack;
-            }
-        }
-
-        return Err(Box::new(ImonError::UnexpectedResponse));        // Found neither
-    }
+    check_ack(port)?;
 
     sleep(Duration::from_millis(config.multisampling*config.exposure_ms));
 
@@ -525,11 +512,58 @@ fn get_spectrum(
     println!("bit_sum: {}", bit_sum);
     println!("checksum: {}", checksum);            // TODO remove after testing
 
+    let temperature = match get_temperature(port) {
+        Ok(temperature) => temperature,
+        Err(_) => 25.0
+    };
+
     Ok(Spectrum::from_ibsen_imon(
         &pixel_readings,
-        25.0,                    // TODO pegar a temperatura
+        temperature,
         calibration
     ))
+}
+
+fn get_temperature(
+    port: &mut Box<dyn SerialPort>
+) -> Result<f64, Box<dyn Error>> {
+    check_ack(port)?;
+
+    let mut buffer: [u8; 64] = [0; 64];
+    port.read(&mut buffer)?;
+    let response = String::from_utf8_lossy(&buffer);
+
+    for line in response.split('\r') {
+        let line = line.replace(' ', "");
+        let line = line.replace('\n', "");
+
+        if let Ok(temperature) = line.parse() {
+            println!("Temperature: {}", temperature);
+            return Ok(temperature);
+        }
+    }
+
+    return Err(Box::new(ImonError::UnexpectedResponse));
+}
+
+fn check_ack(
+    port: &mut Box<dyn SerialPort>
+) -> Result<(), Box<dyn Error>> {
+
+    let mut buffer_single: [u8; 1] = [0; 1];
+
+    for _ in 0..100 {
+        port.read_exact(&mut buffer_single)?;
+
+        if buffer_single[0] == 0x15 {                // Found nack
+            return Err(Box::new(ImonError::CommandNack));
+        }
+        if buffer_single[0] == 0x06 {                // Found ack
+            return Ok(());
+        }
+    }
+
+    return Err(Box::new(ImonError::UnexpectedResponse));        // Found neither
 }
 
 fn auto_save_spectrum(
