@@ -62,7 +62,7 @@ fn GraphFrame<'a, G:Html>(cx: Scope<'a>, props: FrameProps<'a>) -> View<G> {
 
     let path_sqr = create_memo(cx, || 
         format!("M 1,1 L {},1 L {},{} L 1,{} L 1,1",
-            (*graph_size.get()).0 - 1,        // - 1 pra margem por conta ta largura do traço
+            (*graph_size.get()).0 - 1,        // - 1 pra margem por conta da largura do traço
             (*graph_size.get()).0 - 1, (*graph_size.get()).1 - 1,
             (*graph_size.get()).1 - 1
         )

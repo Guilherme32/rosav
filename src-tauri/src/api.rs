@@ -50,31 +50,29 @@ pub fn get_window_size(window: tauri::Window) -> (u32, u32) {
         Err(_) => return (0, 0)
     };
 
-    (((win_size.width as f64) / scale).round() as u32, 
-     ((win_size.height as f64) / scale).round() as u32)
+    let compensation =
+        if cfg!(windows) {
+            (0, 0)
+        } else if cfg!(unix) {    // The webkit on my Fedora38 is giving nonsensical values
+            (50, 90)
+        } else {
+            (0, 0)
+        };
+
+    (((win_size.width - compensation.0) as f64 / scale).round() as u32, 
+     ((win_size.height - compensation.1) as f64 / scale).round() as u32)
 }
 
 #[tauri::command]
 pub fn get_svg_size(window: tauri::Window) -> (u32, u32) {
-    let win_size = match window.inner_size() {
-        Ok(size) => size,
-        Err(_) => return (0, 0)
-    };
-    let scale = match window.scale_factor() {
-        Ok(scale) => scale,
-        Err(_) => return (0, 0)
-    };
-
-    let win_size_scaled = (((win_size.width as f64) / scale).round() as u32, 
-                           ((win_size.height as f64) / scale).round() as u32);
-
+    let win_size = get_window_size(window);
  
-    if win_size.width == 0 {            // if minimized
+    if win_size.0 == 0 {            // if minimized
         return (0, 0);
     }
 
-    (win_size_scaled.0 - 23 - 200,
-     win_size_scaled.1 - 27 - 32)
+    (win_size.0 - 23 - 200,
+     win_size.1 - 27 - 32)
 }
 
 #[tauri::command]
