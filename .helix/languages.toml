@@ -1,0 +1,7 @@
+[[language]]
+name = "rust"
+roots = ["Cargo.toml", "Cargo.lock", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock"]
+
+[language-server.rust-analyzer.config]
+linkedProjects = ["Cargo.toml", "src-tauri/Cargo.toml"]
+
