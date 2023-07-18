@@ -4,7 +4,7 @@ use sycamore::prelude::*;
 // use itertools::Itertools;
 // use std::iter;
 
-use sycamore::futures::{ spawn_local_scoped, spawn_local };
+use sycamore::futures::{spawn_local, spawn_local_scoped};
 
 use gloo_timers::future::TimeoutFuture;
 
@@ -20,9 +20,7 @@ use graph::*;
 pub mod side_bar;
 use side_bar::*;
 
-
 fn main() {
-
     panic::set_hook(Box::new(|reason| {
         let reason = format!("PANIC!!!! -> {}", reason);
         spawn_local(async move {
@@ -30,11 +28,12 @@ fn main() {
         });
     }));
 
-    sycamore::render(|cx| view!{ cx,
-        Main {}
+    sycamore::render(|cx| {
+        view! { cx,
+            Main {}
+        }
     })
 }
-
 
 async fn get_trace_info() -> TraceInfo {
     let svg_size = get_svg_size().await;
@@ -44,44 +43,47 @@ async fn get_trace_info() -> TraceInfo {
     TraceInfo {
         svg_size,
         wavelength_limits,
-        power_limits
+        power_limits,
     }
 }
 
 pub enum ActiveSide {
     Traces,
-    Config
+    Config,
 }
 
 // COMPONENTS ----------------------------
 
 #[component]
-fn Main<G:Html>(cx: Scope) -> View<G> {
+fn Main<G: Html>(cx: Scope) -> View<G> {
     let traces = create_signal(cx, vec![new_trace(0)]);
 
     let svg_size = create_signal(cx, (0i32, 0i32));
 
     spawn_local_scoped(cx, async move {
         loop {
-            TimeoutFuture::new(200).await;                // 5 fps, #TODO send to config
+            TimeoutFuture::new(200).await; // 5 fps, #TODO send to config
             let current_info = get_trace_info().await;
 
-            if unread_spectrum().await {                // Get the latest spectrum if it is available
+            if unread_spectrum().await {
+                // Get the latest spectrum if it is available
                 let new_path = get_last_spectrum_path().await;
 
                 traces.modify().last_mut().map(|trace| {
                     trace.drawn_info = current_info.clone();
                     trace.svg_path = new_path;
                 });
-                continue;                // Skip the loop to end the modify() and avoid problems
+                continue; // Skip the loop to end the modify() and avoid problems
             }
 
             let new_svg_size = get_svg_size().await;
-            for (id, trace) in traces.modify().iter_mut().enumerate() {    // Update when the window changes
-                if trace.svg_path.len() == 0 {                             // No old spectrum, no update
+            for (id, trace) in traces.modify().iter_mut().enumerate() {
+                // Update when the window changes
+                if trace.svg_path.len() == 0 {
+                    // No old spectrum, no update
                     continue;
                 }
-                if trace.drawn_info !=  current_info {
+                if trace.drawn_info != current_info {
                     trace.drawn_info = current_info.clone();
                     if trace.active {
                         trace.svg_path = get_last_spectrum_path().await;
@@ -99,14 +101,14 @@ fn Main<G:Html>(cx: Scope) -> View<G> {
 
     spawn_local_scoped(cx, async move {
         loop {
-            TimeoutFuture::new(200).await;                // 5 fps, #TODO passar pra configsend to
+            TimeoutFuture::new(200).await; // 5 fps, #TODO passar pra configsend to
             update_state(connection_state).await;
         }
     });
 
     let active_side = create_signal(cx, ActiveSide::Traces);
 
-    view!{ cx,
+    view! { cx,
         div(class="horizontal-container") {
 
             SideBar(
@@ -134,7 +136,7 @@ fn Main<G:Html>(cx: Scope) -> View<G> {
 async fn update_state<'a>(connection_state: &'a Signal<ConnectionState>) {
     if let Some(new_state) = get_connection_state().await {
         if new_state != *connection_state.get() {
-            connection_state.set(new_state); 
+            connection_state.set(new_state);
         }
     }
 }
@@ -143,11 +145,11 @@ async fn update_state<'a>(connection_state: &'a Signal<ConnectionState>) {
 struct LowerBarProps<'a> {
     saving: &'a ReadSignal<bool>,
     connection_state: &'a Signal<ConnectionState>,
-    active_side: &'a Signal<ActiveSide>
+    active_side: &'a Signal<ActiveSide>,
 }
 
 #[component]
-fn LowerBar<'a, G:Html>(cx: Scope<'a>, props: LowerBarProps<'a>) -> View<G> {
+fn LowerBar<'a, G: Html>(cx: Scope<'a>, props: LowerBarProps<'a>) -> View<G> {
     let connect = move |_| {
         spawn_local_scoped(cx, async move {
             connect_acquisitor().await;
@@ -173,21 +175,17 @@ fn LowerBar<'a, G:Html>(cx: Scope<'a>, props: LowerBarProps<'a>) -> View<G> {
         })
     };
 
-    let enter_config = move |_| {
-        match *props.active_side.get() {
-            ActiveSide::Config => (),
-            _ => {
-                props.active_side.set(ActiveSide::Config);
-            }
+    let enter_config = move |_| match *props.active_side.get() {
+        ActiveSide::Config => (),
+        _ => {
+            props.active_side.set(ActiveSide::Config);
         }
     };
 
-    let enter_traces = move |_| {
-        match *props.active_side.get() {
-            ActiveSide::Traces => (),
-            _ => {
-                props.active_side.set(ActiveSide::Traces);
-            }
+    let enter_traces = move |_| match *props.active_side.get() {
+        ActiveSide::Traces => (),
+        _ => {
+            props.active_side.set(ActiveSide::Traces);
         }
     };
 
@@ -199,7 +197,7 @@ fn LowerBar<'a, G:Html>(cx: Scope<'a>, props: LowerBarProps<'a>) -> View<G> {
             }
             div() {
                 (match *props.connection_state.get() {
-                    ConnectionState::Connected => 
+                    ConnectionState::Connected =>
                         view! { cx,
                             button(on:click=start_reading, class="no-offset") { " " }
                             // button(style="padding-right: 0.6rem;") { "󱑹 " }        // TODO put single read
@@ -221,19 +219,18 @@ fn LowerBar<'a, G:Html>(cx: Scope<'a>, props: LowerBarProps<'a>) -> View<G> {
     }
 }
 
-
 #[derive(Prop)]
 struct StatusProps<'a> {
     saving: &'a ReadSignal<bool>,
-    connection_state: &'a ReadSignal<ConnectionState>
+    connection_state: &'a ReadSignal<ConnectionState>,
 }
 
 #[component]
-fn Status<'a, G:Html>(cx: Scope<'a>, props: StatusProps<'a>) -> View<G> {
-    view! { cx, 
+fn Status<'a, G: Html>(cx: Scope<'a>, props: StatusProps<'a>) -> View<G> {
+    view! { cx,
         div(class="status") {
             (match *props.connection_state.get() {
-                ConnectionState::Connected => 
+                ConnectionState::Connected =>
                     view! { cx, p() { "Conectado" } },
                 ConnectionState::Disconnected =>
                     view! { cx, p() { "Desconectado" } },
@@ -242,11 +239,11 @@ fn Status<'a, G:Html>(cx: Scope<'a>, props: StatusProps<'a>) -> View<G> {
             })
 
             (if *props.saving.get() {
-                view! { cx, 
+                view! { cx,
                     p() { "Salvando" }
                 }
             } else {
-                view! { cx, 
+                view! { cx,
                     p() { "Não Salvando" }
                 }
             })
