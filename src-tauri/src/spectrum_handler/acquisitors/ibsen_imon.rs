@@ -27,8 +27,7 @@ use crate::spectrum_handler::{SpectrumHandler, State};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ImonConfig {
-    pub multisampling: u64,
-    pub exposure_ms: u64,
+    pub exposure_us: u64,
     pub read_delay_ms: u64,
     pub calibration: ImonCalibration,
 }
@@ -52,8 +51,7 @@ pub fn new_imon(config: ImonConfig, log_sender: SyncSender<Log>) -> Imon {
 
 pub fn default_config() -> ImonConfig {
     ImonConfig {
-        multisampling: 1,
-        exposure_ms: 10,
+        exposure_us: 10,
         read_delay_ms: 100,
         calibration: ImonCalibration {
             wavelength_fit: [
@@ -362,9 +360,7 @@ fn is_imon(port: SerialPortInfo) -> Result<Box<dyn SerialPort>, Box<dyn Error>> 
             let mut buffer: [u8; 1024] = [0; 1024];
             port.read(&mut buffer)?;
             let response = String::from_utf8_lossy(&buffer);
-            println!("{}", response);
 
-            // TODO check if ID matches here
             if response.len() != 0 {
                 if response.contains("JETI_VersaPIC_RU60") {
                     return Ok(port);
@@ -485,8 +481,8 @@ fn get_spectrum(
     calibration: &ImonCalibration,
 ) -> Result<Spectrum, Box<dyn Error>> {
     let command = format!(
-        "*meas {} 1 3\r",   // *meas tint av format<CR>
-        config.exposure_ms  //, config.multisampling
+        "*meas 0.{:0>3} 1 3\r", // *meas tint (ms) av format<CR>
+        config.exposure_us
     )
     .into_bytes();
 
@@ -497,9 +493,7 @@ fn get_spectrum(
 
     check_ack(port)?;
 
-    sleep(Duration::from_millis(
-        config.multisampling * config.exposure_ms,
-    ));
+    sleep(Duration::from_micros(config.exposure_us));
 
     'check_bell: {
         // Searches for the bell (reading complete)
@@ -534,14 +528,14 @@ fn get_spectrum(
     port.read_exact(&mut buffer_two)?;
     let checksum: u32 = buffer_two[0] as u32 + (buffer_two[1] as u32) << 8;
 
-    println!("length: {}/{}", 2 * pixel_readings.len(), length);
-    println!("bit_sum: {}", bit_sum);
-    println!("checksum: {}", checksum); // TODO remove after testing
-
     let temperature = match get_temperature(port) {
         Ok(temperature) => temperature,
-        Err(_) => 25.0,
+        Err(_) => 25.314,
     };
+
+    println!("bit_sum: {}", bit_sum);
+    println!("checksum: {}", checksum); // TODO remove after testing
+    println!("temperature: {}", temperature); // TODO remove after testing
 
     Ok(Spectrum::from_ibsen_imon(
         &pixel_readings,
@@ -551,19 +545,26 @@ fn get_spectrum(
 }
 
 fn get_temperature(port: &mut Box<dyn SerialPort>) -> Result<f64, Box<dyn Error>> {
-    check_ack(port)?;
+    let command = format!("*meas:tempe\r",).into_bytes();
+
+    port.clear(ClearBuffer::Input)?;
+    port.write(&command)?;
 
     let mut buffer: [u8; 64] = [0; 64];
     port.read(&mut buffer)?;
     let response = String::from_utf8_lossy(&buffer);
+    println!("Temp respose: {}", response);
 
     for line in response.split('\r') {
         let line = line.replace(' ', "");
+        let line = line.replace('\t', ""); // Tabs
         let line = line.replace('\n', "");
 
-        if let Ok(temperature) = line.parse() {
-            println!("Temperature: {}", temperature);
-            return Ok(temperature);
+        for word in line.split(':') {
+            println!("word: {}", word);
+            if let Ok(temperature) = word.parse() {
+                return Ok(temperature);
+            }
         }
     }
 
@@ -623,9 +624,8 @@ impl Spectrum {
         let mut values: Vec<SpectrumValue> = Vec::new();
 
         for (pixel, reading) in pixel_readings.iter().enumerate() {
-            // let pwr: f64 = ((*reading as f64) / 409.6).log10();
-            // let pwr = if pwr < -100.0 { -100.0 } else { pwr };
-            let pwr = *reading as f64;
+            let pwr: f64 = ((*reading as f64) / 409.6).log10();
+            let pwr = if pwr < -100.0 { -100.0 } else { pwr };
             let mut wl: f64 = 0.0;
 
             for (j, coef) in calibration.wavelength_fit.iter().enumerate() {
