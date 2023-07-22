@@ -23,13 +23,15 @@ use crate::spectrum_handler::{SpectrumHandler, State};
 
 // TODO use a trait to make the integration of new acquistors easier
 
+// TODO refatorar o código pra deixar mais bunitinho
+
 // Region: Main declarations ---------------------------------------------------
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ImonConfig {
     pub exposure_us: u64,
     pub read_delay_ms: u64,
-    pub calibration: ImonCalibration,
+    // pub calibration: ImonCalibration,
 }
 
 #[derive(Debug)]
@@ -53,26 +55,33 @@ pub fn default_config() -> ImonConfig {
     ImonConfig {
         exposure_us: 10,
         read_delay_ms: 100,
-        calibration: ImonCalibration {
-            wavelength_fit: [
-                1.596227e3,
-                -1.380588e-1,
-                -6.197645e-5,
-                -5.290868e-9,
-                4.363884e-12,
-                -3.879178e-15,
-            ],
-            temperature_coeffs: [1.593802e-6, -2.178398e-5, -3.364313e-3, 5.350232e-2],
-        },
+        // calibration: ImonCalibration { // TODO remove
+        //     wavelength_fit: [
+        //         1.596227e3,
+        //         -1.380588e-1,
+        //         -6.197645e-5,
+        //         -5.290868e-9,
+        //         4.363884e-12,
+        //         -3.879178e-15,
+        //     ],
+        //     temperature_coeffs: [1.593802e-6, -2.178398e-5, -3.364313e-3, 5.350232e-2],
+        // },
     }
 }
 
 // Region Helper declarations --------------------------------------------------
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ImonCalibration {
-    pub wavelength_fit: [f64; 6],
-    pub temperature_coeffs: [f64; 4],
+// TODO remove
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// pub struct ImonCalibration {
+//     pub wavelength_fit: [f64; 6],
+//     pub temperature_coeffs: [f64; 4],
+// }
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct ImonCoefficients {
+    pub wavelength: [f64; 6],
+    pub temperature: [f64; 4],
 }
 
 #[derive(Debug)]
@@ -86,6 +95,7 @@ enum ImonState {
 struct ConnectedImon {
     port: Arc<Mutex<Box<dyn SerialPort>>>,
     n_pixels: u32,
+    coefficients: ImonCoefficients,
 }
 
 #[derive(Debug)]
@@ -241,6 +251,7 @@ impl Imon {
 
                 let port_reference = Arc::clone(&connected_imon.port);
                 let n_pixels = connected_imon.n_pixels;
+                let coefficients = connected_imon.coefficients;
 
                 thread::spawn(move || {
                     constant_read(
@@ -253,6 +264,7 @@ impl Imon {
                         config_rx,
                         port_reference,
                         n_pixels,
+                        coefficients,
                     );
                 });
 
@@ -395,14 +407,50 @@ fn parse_imon_parameters(mut port: Box<dyn SerialPort>) -> Result<ConnectedImon,
         }
     }
 
+    let coefficients = fetch_coefficients(&mut port)?;
+
     if let Some(n_pixels) = n_pixels {
         return Ok(ConnectedImon {
             port: Arc::new(Mutex::new(port)),
             n_pixels,
+            coefficients,
         });
     }
 
     Err(Box::new(ImonError::ParseError))
+}
+
+fn fetch_coefficients(port: &mut Box<dyn SerialPort>) -> Result<ImonCoefficients, Box<dyn Error>> {
+    let mut coefficients = ImonCoefficients {
+        wavelength: [0.0; 6],
+        temperature: [0.0; 4],
+    };
+
+    // Get wavelength coefficients --------------------------------------------
+    port.clear(ClearBuffer::Input)?;
+    port.write(b"*rdusr2 0\r")?; // Read user flash memory block 0
+
+    for i in 0..6 {
+        let mut buffer: [u8; 15] = [0; 15];
+        port.read_exact(&mut buffer)?;
+        let buffer = String::from_utf8_lossy(&buffer);
+
+        coefficients.wavelength[i] = buffer.parse()?;
+    }
+
+    // Get temperature coefficients -------------------------------------------
+    port.clear(ClearBuffer::Input)?;
+    port.write(b"*rdusr2 0\r")?; // Read user flash memory block 1
+
+    for i in 0..4 {
+        let mut buffer: [u8; 15] = [0; 15];
+        port.read_exact(&mut buffer)?;
+        let buffer = String::from_utf8_lossy(&buffer);
+
+        coefficients.temperature[i] = buffer.parse()?;
+    }
+
+    Ok(coefficients)
 }
 
 fn constant_read(
@@ -415,6 +463,7 @@ fn constant_read(
     config_rx: Receiver<ImonConfig>,
     port: Arc<Mutex<Box<dyn SerialPort>>>,
     n_pixels: u32,
+    coefficients: ImonCoefficients,
 ) {
     let mut config = default_config();
     loop {
@@ -433,7 +482,7 @@ fn constant_read(
 
         for i in 0..10 {
             // Tries to get the spectrum 10 times
-            match get_spectrum(&mut *port, &config, n_pixels, &config.calibration) {
+            match get_spectrum(&mut *port, &config, n_pixels, &coefficients) {
                 Ok(spectrum) => {
                     if saving.load(Ordering::Relaxed) {
                         let _ = auto_save_spectrum(&spectrum, &auto_save_path);
@@ -478,7 +527,7 @@ fn get_spectrum(
     port: &mut Box<dyn SerialPort>,
     config: &ImonConfig,
     n_pixels: u32,
-    calibration: &ImonCalibration,
+    coefficients: &ImonCoefficients,
 ) -> Result<Spectrum, Box<dyn Error>> {
     let command = format!(
         "*meas 0.{:0>3} 1 3\r", // *meas tint (ms) av format<CR>
@@ -515,11 +564,17 @@ fn get_spectrum(
     let length: u32 = buffer_two[0] as u32 + (buffer_two[1] as u32) << 8;
 
     let mut bit_sum: u32 = 0;
+    let mut bytes_sum: u32 = 0;
+    let mut values_sum: u32 = 0;
     let mut pixel_readings: Vec<u32> = Vec::new();
 
+    // TODO colocar length/2 aqui e remover n_pixels do codigo
     for _ in 0..n_pixels {
         port.read_exact(&mut buffer_two)?;
         let reading: u32 = (buffer_two[0] as u32) + ((buffer_two[1] as u32) << 8);
+
+        bytes_sum += (buffer_two[0] + buffer_two[1]) as u32;
+        values_sum += reading;
 
         pixel_readings.push(reading);
         bit_sum += reading.count_ones();
@@ -534,13 +589,15 @@ fn get_spectrum(
     };
 
     println!("bit_sum: {}", bit_sum);
+    println!("bytes_sum: {}", bytes_sum);
+    println!("bytes_sum: {}", values_sum);
     println!("checksum: {}", checksum); // TODO remove after testing
     println!("temperature: {}", temperature); // TODO remove after testing
 
     Ok(Spectrum::from_ibsen_imon(
         &pixel_readings,
         temperature,
-        calibration,
+        coefficients,
     ))
 }
 
@@ -614,12 +671,12 @@ impl Spectrum {
     pub fn from_ibsen_imon(
         pixel_readings: &[u32],
         temperature: f64,
-        calibration: &ImonCalibration,
+        coefficients: &ImonCoefficients,
     ) -> Spectrum {
-        let t_alpha = calibration.temperature_coeffs[0];
-        let t_alpha_0 = calibration.temperature_coeffs[1];
-        let t_beta = calibration.temperature_coeffs[2];
-        let t_beta_0 = calibration.temperature_coeffs[3];
+        let t_alpha = coefficients.temperature[0]; // TODO conferir a ordem
+        let t_alpha_0 = coefficients.temperature[1];
+        let t_beta = coefficients.temperature[2];
+        let t_beta_0 = coefficients.temperature[3];
 
         let mut values: Vec<SpectrumValue> = Vec::new();
 
@@ -628,7 +685,7 @@ impl Spectrum {
             let pwr = if pwr < -100.0 { -100.0 } else { pwr };
             let mut wl: f64 = 0.0;
 
-            for (j, coef) in calibration.wavelength_fit.iter().enumerate() {
+            for (j, coef) in coefficients.wavelength.iter().enumerate() {
                 wl += (pixel as f64).powf(j as f64) * coef;
             }
 
