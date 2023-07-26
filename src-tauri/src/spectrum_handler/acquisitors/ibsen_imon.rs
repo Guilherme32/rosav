@@ -29,7 +29,7 @@ use crate::spectrum_handler::{SpectrumHandler, State};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ImonConfig {
-    pub exposure_us: u64,
+    pub exposure_us: u64, // TODO change to ms and use as float
     pub read_delay_ms: u64,
     // pub calibration: ImonCalibration,
 }
@@ -431,19 +431,21 @@ fn fetch_coefficients(port: &mut Box<dyn SerialPort>) -> Result<ImonCoefficients
     port.write(b"*rdusr2 0\r")?; // Read user flash memory block 0
 
     for i in 0..6 {
-        let mut buffer: [u8; 15] = [0; 15];
+        let mut buffer: [u8; 16] = [0; 16];
         port.read_exact(&mut buffer)?;
         let buffer = String::from_utf8_lossy(&buffer);
 
         coefficients.wavelength[i] = buffer.parse()?;
     }
 
+    sleep(Duration::from_millis(20)); // Without this the next step gets wrong values
+
     // Get temperature coefficients -------------------------------------------
     port.clear(ClearBuffer::Input)?;
-    port.write(b"*rdusr2 0\r")?; // Read user flash memory block 1
+    port.write(b"*rdusr2 1\r")?; // Read user flash memory block 1
 
     for i in 0..4 {
-        let mut buffer: [u8; 15] = [0; 15];
+        let mut buffer: [u8; 16] = [0; 16];
         port.read_exact(&mut buffer)?;
         let buffer = String::from_utf8_lossy(&buffer);
 
@@ -452,6 +454,10 @@ fn fetch_coefficients(port: &mut Box<dyn SerialPort>) -> Result<ImonCoefficients
 
     Ok(coefficients)
 }
+
+// fn wait_complete_response() -> Result<(), Box<dyn Error>> {
+
+// }
 
 fn constant_read(
     last_spectrum: Arc<Mutex<Option<Spectrum>>>,
@@ -474,7 +480,6 @@ fn constant_read(
         match config_rx.try_recv() {
             Ok(new_config) => {
                 config = new_config;
-                println!("Updated config: {:?}", config);
             }
             Err(TryRecvError::Empty) => (),
             Err(TryRecvError::Disconnected) => break,
@@ -561,11 +566,8 @@ fn get_spectrum(
     let mut buffer_two: [u8; 2] = [0; 2];
     port.read_exact(&mut buffer_two)?;
 
-    let length: u32 = buffer_two[0] as u32 + (buffer_two[1] as u32) << 8;
+    let _length: u32 = buffer_two[0] as u32 + (buffer_two[1] as u32) << 8;
 
-    let mut bit_sum: u32 = 0;
-    let mut bytes_sum: u32 = 0;
-    let mut values_sum: u32 = 0;
     let mut pixel_readings: Vec<u32> = Vec::new();
 
     // TODO colocar length/2 aqui e remover n_pixels do codigo
@@ -573,26 +575,17 @@ fn get_spectrum(
         port.read_exact(&mut buffer_two)?;
         let reading: u32 = (buffer_two[0] as u32) + ((buffer_two[1] as u32) << 8);
 
-        bytes_sum += (buffer_two[0] + buffer_two[1]) as u32;
-        values_sum += reading;
-
         pixel_readings.push(reading);
-        bit_sum += reading.count_ones();
     }
 
     port.read_exact(&mut buffer_two)?;
-    let checksum: u32 = buffer_two[0] as u32 + (buffer_two[1] as u32) << 8;
+    // TODO find out how this checksum works
+    let _checksum: u32 = buffer_two[0] as u32 + (buffer_two[1] as u32) << 8;
 
     let temperature = match get_temperature(port) {
         Ok(temperature) => temperature,
         Err(_) => 25.314,
     };
-
-    println!("bit_sum: {}", bit_sum);
-    println!("bytes_sum: {}", bytes_sum);
-    println!("bytes_sum: {}", values_sum);
-    println!("checksum: {}", checksum); // TODO remove after testing
-    println!("temperature: {}", temperature); // TODO remove after testing
 
     Ok(Spectrum::from_ibsen_imon(
         &pixel_readings,
@@ -610,7 +603,6 @@ fn get_temperature(port: &mut Box<dyn SerialPort>) -> Result<f64, Box<dyn Error>
     let mut buffer: [u8; 64] = [0; 64];
     port.read(&mut buffer)?;
     let response = String::from_utf8_lossy(&buffer);
-    println!("Temp respose: {}", response);
 
     for line in response.split('\r') {
         let line = line.replace(' ', "");
@@ -618,7 +610,6 @@ fn get_temperature(port: &mut Box<dyn SerialPort>) -> Result<f64, Box<dyn Error>
         let line = line.replace('\n', "");
 
         for word in line.split(':') {
-            println!("word: {}", word);
             if let Ok(temperature) = word.parse() {
                 return Ok(temperature);
             }
@@ -673,7 +664,7 @@ impl Spectrum {
         temperature: f64,
         coefficients: &ImonCoefficients,
     ) -> Spectrum {
-        let t_alpha = coefficients.temperature[0]; // TODO conferir a ordem
+        let t_alpha = coefficients.temperature[0];
         let t_alpha_0 = coefficients.temperature[1];
         let t_beta = coefficients.temperature[2];
         let t_beta_0 = coefficients.temperature[3];

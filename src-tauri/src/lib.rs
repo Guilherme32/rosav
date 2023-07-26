@@ -6,6 +6,7 @@ pub mod spectrum_handler;
 pub mod spectrum;
 pub mod api;
 pub mod config;
+pub mod processing;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Log {

@@ -32,7 +32,6 @@ pub fn empty_file_reader_config() -> FileReaderConfig {
 pub struct ImonConfig {
     pub exposure_us: u64,
     pub read_delay_ms: u64,
-    pub calibration: ImonCalibration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -45,9 +44,5 @@ pub fn empty_imon_config() -> ImonConfig {
     ImonConfig {
         exposure_us: 0,
         read_delay_ms: 0,
-        calibration: ImonCalibration {
-            wavelength_fit: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            temperature_coeffs: [0.0, 0.0, 0.0, 0.0],
-        },
     }
 }
