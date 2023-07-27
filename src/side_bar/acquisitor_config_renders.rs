@@ -3,6 +3,7 @@ use sycamore::{prelude::*, rt};
 
 use crate::api::*;
 use acquisitors::*;
+use crate::side_bar::check_number_input;
 
 #[component]
 pub fn RenderFileReaderConfig<G: Html>(cx: Scope) -> View<G> {
@@ -76,7 +77,7 @@ pub fn RenderImonConfig<G: Html>(cx: Scope) -> View<G> {
         let _config = get_acquisitor_config().await;
 
         if let AcquisitorConfig::ImonConfig(_config) = _config {
-            exposure.set(_config.exposure_us.to_string());
+            exposure.set(_config.exposure_ms.to_string());
             read_delay.set(_config.read_delay_ms.to_string());
 
             config.set(_config);
@@ -99,10 +100,10 @@ pub fn RenderImonConfig<G: Html>(cx: Scope) -> View<G> {
 
         let mut config = config.modify();
 
-        match (*exposure.get()).parse::<u64>() {
-            Ok(value) if 1 <= value && value <= 999 => config.exposure_us = value,
+        match (*exposure.get()).parse::<f64>() {
+            Ok(value) if 0.001 <= value && value <= 60_000.0 => config.exposure_ms = value,
 
-            _ => exposure.set(config.exposure_us.to_string()),
+            _ => exposure.set(config.exposure_ms.to_string()),
         }
 
         match (*read_delay.get()).parse::<u64>() {
@@ -124,7 +125,7 @@ pub fn RenderImonConfig<G: Html>(cx: Scope) -> View<G> {
                 p { "Exposição: " }
                 input(
                     bind:value=exposure,
-                    type="number",
+                    on:input=|_| check_number_input(exposure),
                     on:focusout=update_config
                 ) {}
                 "ms"
