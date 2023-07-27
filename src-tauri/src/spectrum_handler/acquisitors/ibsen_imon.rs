@@ -29,7 +29,7 @@ use crate::spectrum_handler::{SpectrumHandler, State};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ImonConfig {
-    pub exposure_us: u64, // TODO change to ms and use as float
+    pub exposure_ms: f64, // TODO change to ms and use as float. Done, needs to be checked
     pub read_delay_ms: u64,
     // pub calibration: ImonCalibration,
 }
@@ -53,7 +53,7 @@ pub fn new_imon(config: ImonConfig, log_sender: SyncSender<Log>) -> Imon {
 
 pub fn default_config() -> ImonConfig {
     ImonConfig {
-        exposure_us: 10,
+        exposure_ms: 10.0,
         read_delay_ms: 100,
         // calibration: ImonCalibration { // TODO remove
         //     wavelength_fit: [
@@ -535,8 +535,8 @@ fn get_spectrum(
     coefficients: &ImonCoefficients,
 ) -> Result<Spectrum, Box<dyn Error>> {
     let command = format!(
-        "*meas 0.{:0>3} 1 3\r", // *meas tint (ms) av format<CR>
-        config.exposure_us
+        "*meas {:.3} 1 3\r", // *meas tint (ms) av format<CR>
+        config.exposure_ms
     )
     .into_bytes();
 
@@ -547,7 +547,7 @@ fn get_spectrum(
 
     check_ack(port)?;
 
-    sleep(Duration::from_micros(config.exposure_us));
+    sleep(Duration::from_micros((config.exposure_ms) as u64 + 1));
 
     'check_bell: {
         // Searches for the bell (reading complete)
