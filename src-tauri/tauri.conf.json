@@ -7,7 +7,7 @@
     "withGlobalTauri": true
   },
   "package": {
-    "productName": "Rosa",
+    "productName": "Rosav",
     "version": "0.1.0"
   },
   "tauri": {
@@ -29,7 +29,7 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ],
-      "identifier": "LITel.Rosa",
+      "identifier": "LITel.Rosav",
       "longDescription": "",
       "macOS": {
         "entitlements": null,
@@ -58,7 +58,7 @@
         "fullscreen": false,
         "height": 500,
         "resizable": true,
-        "title": "Rosa",
+        "title": "Rosav",
         "width": 1000,
         "minHeight": 400,
         "minWidth": 700
