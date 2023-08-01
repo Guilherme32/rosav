@@ -672,7 +672,12 @@ impl Spectrum {
         let mut values: Vec<SpectrumValue> = Vec::new();
 
         for (pixel, reading) in pixel_readings.iter().enumerate() {
-            let pwr: f64 = ((*reading as f64) / 409.6).log10();
+            let linear = false;
+            let pwr: f64 = match linear {
+                true => *reading as f64,
+                false => ((*reading as f64) / 409.6).log10(),
+            };
+
             let pwr = if pwr < -100.0 { -100.0 } else { pwr };
             let mut wl: f64 = 0.0;
 
