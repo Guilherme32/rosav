@@ -56,10 +56,11 @@ pub enum ActiveSide {
 
 #[component]
 fn Main<G: Html>(cx: Scope) -> View<G> {
-    let traces = create_signal(cx, vec![new_trace(0)]);
+    let traces = create_signal(cx, vec![new_trace(0, true, true)]);
 
     let svg_size = create_signal(cx, (0i32, 0i32));
 
+    // Get new spectra
     spawn_local_scoped(cx, async move {
         loop {
             TimeoutFuture::new(200).await; // 5 fps, #TODO send to config
@@ -68,13 +69,24 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
             if unread_spectrum().await {
                 // Get the latest spectrum if it is available
                 let new_path = get_last_spectrum_path().await;
+                let new_valleys = get_last_spectrum_valleys_points().await;
 
                 traces.modify().last_mut().map(|trace| {
                     trace.drawn_info = current_info.clone();
                     trace.svg_path = new_path;
+                    trace.valleys = new_valleys;
                 });
-                continue; // Skip the loop to end the modify() and avoid problems
+                // continue; // Skip the loop to end the modify() and avoid problems
+                // TODO remove. Test if the change does not make weird modify problems
             }
+        }
+    });
+
+    // Update on window update
+    spawn_local_scoped(cx, async move {
+        loop {
+            TimeoutFuture::new(200).await; // 5 fps, #TODO send to config / use as event
+            let current_info = get_trace_info().await;
 
             let new_svg_size = get_svg_size().await;
             for (id, trace) in traces.modify().iter_mut().enumerate() {
@@ -87,8 +99,10 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
                     trace.drawn_info = current_info.clone();
                     if trace.active {
                         trace.svg_path = get_last_spectrum_path().await;
+                        trace.valleys = get_last_spectrum_valleys_points().await;
                     } else {
                         trace.svg_path = get_frozen_spectrum_path(id).await;
+                        trace.valleys = get_frozen_spectrum_valleys_points(id).await;
                     }
                 }
             }
@@ -101,7 +115,7 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
 
     spawn_local_scoped(cx, async move {
         loop {
-            TimeoutFuture::new(200).await; // 5 fps, #TODO passar pra configsend to
+            TimeoutFuture::new(200).await; // 5 fps, #TODO send to config / use as event
             update_state(connection_state).await;
         }
     });

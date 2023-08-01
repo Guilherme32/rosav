@@ -689,6 +689,6 @@ impl Spectrum {
         }
 
         let values = values.into_iter().rev().collect();
-        Spectrum { values }
+        Spectrum { values, valleys: None }
     }
 }
