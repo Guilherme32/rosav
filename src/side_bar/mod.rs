@@ -58,7 +58,10 @@ async fn freeze_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
     trace.freeze_time = Some(get_time().await);
     trace.active = false;
 
-    traces_list.push(new_trace(id+1));
+    let visible = trace.visible;
+    let draw_valleys = trace.draw_valleys;
+
+    traces_list.push(new_trace(id+1, visible, draw_valleys));
 
     freeze_spectrum().await;
 }
@@ -66,7 +69,7 @@ async fn freeze_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
 async fn delete_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
     traces_list.modify().remove(id as usize);
 
-    for (i, mut trace) in traces_list.modify().iter_mut().enumerate() {
+    for (i, trace) in traces_list.modify().iter_mut().enumerate() {
         trace.id = i as u8;
     }
 

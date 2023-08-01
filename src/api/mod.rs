@@ -15,7 +15,6 @@ use acquisitors::*;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct Log {
-    // pub id: u32,
     pub msg: String,
     pub log_type: LogType
 }
@@ -97,6 +96,13 @@ pub async fn get_last_spectrum_path() -> String {
     obj_rebuilt
 }
 
+pub async fn get_last_spectrum_valleys_points() -> Vec<(f64, f64)> {
+    let from_back = invoke("get_last_spectrum_valleys_points", to_value(&()).unwrap()).await;
+    let obj_rebuilt: Vec<(f64, f64)> = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}
+
 // É i32 para poder fazer subtração, mas sempre será > 0 nos limites do programa
 pub async fn get_window_size() -> (i32, i32) {
     let from_back = invoke("get_window_size", to_value(&()).unwrap()).await;
@@ -160,6 +166,23 @@ pub async fn get_frozen_spectrum_path(id: usize) -> String {
     obj_rebuilt
 }
 
+pub async fn get_frozen_spectrum_valleys_points(id: usize) -> Vec<(f64, f64)> {
+    let from_back = invoke(
+        "get_frozen_spectrum_valleys_points",
+        to_value(&IdArgs { id }).unwrap()
+    ).await;
+    let obj_rebuilt: Vec<(f64, f64)> = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}
+
+pub async fn pick_folder() -> Option<PathBuf> {
+    let from_back = invoke("pick_folder", to_value(&()).unwrap()).await;
+    let obj_rebuilt: Option<PathBuf> = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}
+
 pub async fn save_frozen_spectrum(id: usize) {
     invoke("save_frozen_spectrum", to_value(&IdArgs { id } ).unwrap()).await;
 }
@@ -203,12 +226,12 @@ pub async fn acquisitor_stop_reading() {
     invoke("acquisitor_stop_reading", to_value(&()).unwrap()).await;
 }
 
-pub async fn pick_folder() -> Option<PathBuf> {
-    let from_back = invoke("pick_folder", to_value(&()).unwrap()).await;
-    let obj_rebuilt: Option<PathBuf> = from_value(from_back).unwrap();
+// pub async fn pick_folder() -> Option<PathBuf> {
+//     let from_back = invoke("pick_folder", to_value(&()).unwrap()).await;
+//     let obj_rebuilt: Option<PathBuf> = from_value(from_back).unwrap();
 
-    obj_rebuilt
-}
+//     obj_rebuilt
+// }
 
 pub async fn get_handler_config() -> HandlerConfig {
     let from_back = invoke("get_handler_config", to_value(&()).unwrap()).await;

@@ -28,6 +28,7 @@ home = "0.5.5"
 thiserror = "1.0.40"
 
 serialport = "4.2.1"
+find_peaks = "0.1.5"
 
 [features]
 # by default Tauri runs in production mode

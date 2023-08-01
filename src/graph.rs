@@ -29,22 +29,57 @@ pub fn Graph<'a, G:Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
                 }
                 Indexed(
                     iterable=props.traces,
-                    view = |cx, trace| if trace.visible { 
-                        view! { cx,
-                            path(
-                                d=trace.svg_path,
-                                fill="none",
-                                stroke-width="2",
-                                stroke=trace_id_to_color(trace.id),
-                                clip-path="url(#graph-clip)"
-                                ) {}
-                        } 
-                    } else { view! { cx, "" } }
+                    view = |cx, trace| { 
+                        draw_trace(cx, trace)
+                    }
                 )
             }
         }
     }
 }
+
+fn draw_trace<'a, G:Html>(cx: Scope<'a>, trace: Trace) -> View<G> {
+    let trace_line = if trace.visible {
+        view! { cx,
+            path(
+                d=trace.svg_path,
+                fill="none",
+                stroke-width="2",
+                stroke=trace_id_to_color(trace.id),
+                clip-path="url(#graph-clip)"
+            ) {}
+        }
+    } else { view! { cx, "" } };
+
+    view! { cx,
+        (trace_line)        // Had to separate because of ownership issues
+
+        (if trace.draw_valleys {
+            View::new_fragment(trace.valleys.iter()
+                .map(|&valley| view! { cx,
+                    circle(
+                        cx=valley.0,
+                        cy=valley.1,
+                        r="6",
+                        stroke-width="2",
+                        stroke="#16161D",
+                        fill=trace_id_to_color(trace.id),
+                        clip-path="url(#graph-clip)"
+                    ) {}
+                    line(
+                        x1=valley.0,
+                        x2=valley.0,
+                        y1=(valley.1 + 3.0),
+                        y2=(valley.1 - 3.0),
+                        stroke-width="2",
+                        stroke="#16161D",
+                        clip-path="url(#graph-clip)"
+                    ) {}
+                }).collect())
+        } else { view!{ cx, "" } })
+    }
+}
+
 
 #[derive(Prop)]
 struct FrameProps<'a> {

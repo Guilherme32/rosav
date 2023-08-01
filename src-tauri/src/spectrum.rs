@@ -7,6 +7,7 @@ use serde::{ Deserialize, Serialize };
 use std::path::Path;
 
 use itertools::Itertools;
+use find_peaks::PeakFinder;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SpectrumValue {
@@ -16,7 +17,8 @@ pub struct SpectrumValue {
 
 #[derive(Debug, Clone)]
 pub struct Spectrum {
-    pub values: Vec<SpectrumValue>
+    pub values: Vec<SpectrumValue>,
+    pub valleys: Option<Vec<SpectrumValue>>
 }
 
 #[derive(Debug, Clone)]
@@ -35,12 +37,14 @@ impl fmt::Display for Spectrum {
 }
 
 fn convert_point(
-    limits_wl: &(f64, f64),
-    limits_pwr: &(f64, f64),
+    graph_limits: &Limits,
     svg_limits: &(f64, f64),
     og_point: &SpectrumValue
 ) -> (f64, f64)
 {
+    let limits_pwr = (graph_limits.power.1, graph_limits.power.0);        // Invert because svg coords
+    let limits_wl = graph_limits.wavelength;
+
     let x = (og_point.wavelength - limits_wl.0) / (limits_wl.1 - limits_wl.0);
     let x = x * svg_limits.0;
     
@@ -75,7 +79,7 @@ fn bezier_point(
 
 impl Spectrum {
     pub fn empty() -> Spectrum {
-        Spectrum { values: vec![] }
+        Spectrum { values: vec![], valleys: None }
     }
 
     pub fn from_str(text: &str) -> Result<Spectrum, Box<dyn Error>> {
@@ -89,7 +93,7 @@ impl Spectrum {
             .collect();
         
         match readings {
-            Ok(values) => Ok(Spectrum{ values }),
+            Ok(values) => Ok(Spectrum{ values, valleys: None }),
             Err(err) => Err(Box::new(err))
         }
     }
@@ -98,14 +102,14 @@ impl Spectrum {
         let svg_limits = (svg_limits.0 as f64 - 40.0,
                           svg_limits.1 as f64 - 16.6);
 
-        let limits_pwr = (graph_limits.power.1, graph_limits.power.0);        // Invert because svg coords
-        let limits_wl = graph_limits.wavelength;
+        // let limits_pwr = (graph_limits.power.1, graph_limits.power.0);        // Invert because svg coords
+        // let limits_wl = graph_limits.wavelength;    // TODO remove
 
         if self.values.len() == 0 {
             return "".to_string();
         }
 
-        let cvt = |point| convert_point(&limits_wl, &limits_pwr, &svg_limits, point);
+        let cvt = |point| convert_point(&graph_limits, &svg_limits, point);
         let start = cvt(&self.values[0]);
         let start = format!("M {:.2},{:.2} ", start.0, start.1);
 
@@ -167,3 +171,39 @@ impl Spectrum {
     }
 }
 
+impl Spectrum {
+    pub fn get_valleys(&mut self) -> &Vec<SpectrumValue> {
+        let powers: Vec<f64> = self.values.iter()
+            .map(|spectrum_value| -spectrum_value.power)
+            .collect();
+
+        let mut peak_finder = PeakFinder::new(&powers);
+        peak_finder.with_min_prominence(1.0);        // TODO to config
+
+        let valleys: Vec<SpectrumValue> = peak_finder.find_peaks().iter()
+            .map(|peak| self.values[peak.middle_position()].clone())
+            .collect();
+
+        self.valleys = Some(valleys);
+        (self.valleys.as_ref()).expect("Just put it in a Some, so should be valid")
+    }
+
+    // TODO implement different methods: None, Simple, Lorentz, Gauss
+    pub fn get_valleys_points(
+        &mut self,
+        svg_limits: (u32, u32),
+        graph_limits: &Limits
+    ) -> Vec<(f64, f64)> {
+        let svg_limits = (svg_limits.0 as f64 - 40.0,
+                          svg_limits.1 as f64 - 16.6);
+
+        let valleys = match &self.valleys {
+            Some(valleys) => valleys,
+            None => self.get_valleys()
+        };
+
+        valleys.iter()
+            .map(|valley| convert_point(&graph_limits, &svg_limits, valley))
+            .collect()
+    }
+}

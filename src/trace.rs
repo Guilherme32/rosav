@@ -19,18 +19,18 @@ pub struct Trace {
     pub visible: bool,
     pub draw_valleys: bool,                // TODO adicionar detecção de vale
     pub active: bool,
-    pub valleys: Vec<f64>,
+    pub valleys: Vec<(f64, f64)>,
     // pub svg_size: (i32, i32),
     pub svg_path: String,
     pub freeze_time: Option<String>,        // Se None não está congelado
     pub drawn_info: TraceInfo             // Stuff to check if it needs to be redrawn
 }
 
-pub fn new_trace(id: u8) -> Trace {
+pub fn new_trace(id: u8, visible: bool, draw_valleys: bool) -> Trace {
     Trace {
         id,
-        visible: true,
-        draw_valleys: true,
+        visible,
+        draw_valleys,
         active: true,
         valleys: vec![],
         svg_path: String::new(),

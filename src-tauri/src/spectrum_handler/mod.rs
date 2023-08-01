@@ -143,6 +143,24 @@ impl SpectrumHandler {
         }
     }
 
+    pub fn get_last_spectrum_valleys_points(
+        &self,
+        svg_limits: (u32, u32)
+    ) -> Option<Vec<(f64, f64)>> {
+        let mut spectrum = self.last_spectrum.lock().unwrap();
+
+        if let Some(spectrum_limits) = self.get_limits() {
+            match &mut *spectrum {
+                Some(spectrum) =>
+                    Some(spectrum.get_valleys_points(svg_limits, &spectrum_limits)),
+                None =>
+                    None
+            }
+        } else {
+            None
+        }
+    }
+
     pub fn update_limits(&self) {
         let spectrum = self.last_spectrum.lock().unwrap();
         let mut limits = self.spectrum_limits.lock().unwrap();
@@ -253,6 +271,28 @@ impl SpectrumHandler {
 
         if let Some(spectrum_limits) = self.get_limits() {
             Some(spectrum.to_path(svg_limits, &spectrum_limits))
+        } else {
+            None
+        }
+    }
+
+    pub fn get_frozen_spectrum_valleys_points(
+        &self,
+        id: usize,
+        svg_limits: (u32, u32)
+    ) -> Option<Vec<(f64, f64)>> {
+        let mut frozen_list = self.frozen_spectra.lock().unwrap();
+
+        if id >= frozen_list.len() {
+            self.log_error("[FGF] Não foi possível pegar o espectro congelado, \
+                id fora dos limites".to_string());
+            return None;
+        }
+
+        let spectrum = &mut frozen_list[id];
+
+        if let Some(spectrum_limits) = self.get_limits() {
+            Some(spectrum.get_valleys_points(svg_limits, &spectrum_limits))
         } else {
             None
         }

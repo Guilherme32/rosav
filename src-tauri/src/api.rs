@@ -13,6 +13,9 @@ use spectrum_handler::{
 
 use config::{ write_handler_config, write_acquisitor_config };
 
+// TODO change all commands to async
+
+// Region: basic functions -----------------------------------------------------
 
 #[tauri::command]
 pub fn hello() {
@@ -22,21 +25,6 @@ pub fn hello() {
 #[tauri::command]
 pub fn print_backend(msg: &str) {
     println!("From front: {}", msg);
-}
-
-#[tauri::command]
-pub fn unread_spectrum(handler: tauri::State<SpectrumHandler>) -> bool {
-    handler.unread_spectrum.load(atomic::Ordering::Relaxed)
-}
-
-#[tauri::command]
-pub fn get_last_spectrum_path(
-    handler: tauri::State<SpectrumHandler>,
-    window: tauri::Window
-) -> String 
-{
-    handler.update_limits();
-    handler.get_last_spectrum_path(get_svg_size(window)).unwrap_or(String::new())
 }
 
 #[tauri::command]
@@ -64,6 +52,20 @@ pub fn get_window_size(window: tauri::Window) -> (u32, u32) {
 }
 
 #[tauri::command]
+pub fn get_last_logs(logs: tauri::State<Mutex<mpsc::Receiver<Log>>>) -> Vec::<Log> {
+    let logs = logs.lock().unwrap();
+    logs.try_recv().into_iter().collect()
+}
+
+#[tauri::command]
+pub fn get_time() -> String {
+    Local::now().format("(%H:%M)").to_string()
+}
+
+// Region: Graph / Plot / Spectrum related -------------------------------------
+// SubRegion: Basic graph functions --------------------------------------------
+
+#[tauri::command]
 pub fn get_svg_size(window: tauri::Window) -> (u32, u32) {
     let win_size = get_window_size(window);
  
@@ -73,17 +75,6 @@ pub fn get_svg_size(window: tauri::Window) -> (u32, u32) {
 
     (win_size.0 - 23 - 200,
      win_size.1 - 27 - 32)
-}
-
-#[tauri::command]
-pub fn get_last_logs(logs: tauri::State<Mutex<mpsc::Receiver<Log>>>) -> Vec::<Log> {
-    let logs = logs.lock().unwrap();
-    logs.try_recv().into_iter().collect()
-}
-
-#[tauri::command]
-pub fn get_time() -> String {
-    Local::now().format("(%H:%M)").to_string()
 }
 
 #[tauri::command]
@@ -108,6 +99,46 @@ pub fn get_power_limits(handler: tauri::State<SpectrumHandler>) -> (f64, f64) {
     }
 }
 
+// SubRegion: Last spectrum functions ------------------------------------------
+
+#[tauri::command]
+pub fn unread_spectrum(handler: tauri::State<SpectrumHandler>) -> bool {
+    handler.unread_spectrum.load(atomic::Ordering::Relaxed)
+}
+
+#[tauri::command]
+pub fn get_last_spectrum_path(
+    handler: tauri::State<SpectrumHandler>,
+    window: tauri::Window
+) -> String
+{
+    handler.update_limits();
+    handler.get_last_spectrum_path(get_svg_size(window)).unwrap_or(String::new())
+}
+
+#[tauri::command]
+pub async fn get_last_spectrum_valleys_points(
+    handler: tauri::State<'_, SpectrumHandler>,
+    window: tauri::Window
+) -> Result<Vec<(f64, f64)>, ()>
+{
+    let points = handler.get_last_spectrum_valleys_points(get_svg_size(window));
+    Ok(points.unwrap_or(vec![]))
+}
+
+#[tauri::command]
+pub fn save_continuous(save: bool, handler:tauri::State<SpectrumHandler>) {
+    handler.saving_new.store(save, atomic::Ordering::Relaxed);
+}
+
+#[tauri::command]
+pub fn get_saving(handler: tauri::State<SpectrumHandler>) -> bool {
+    handler.saving_new.load(atomic::Ordering::Relaxed)
+}
+
+
+// SubRegion: Frozen spectra functions -----------------------------------------
+
 #[tauri::command]
 pub fn freeze_spectrum(handler: tauri::State<SpectrumHandler>) {
     handler.freeze_spectrum();
@@ -126,6 +157,16 @@ pub fn get_frozen_spectrum_path(
 ) -> String {
     handler.get_frozen_spectrum_path(id, get_svg_size(window))
         .unwrap_or(String::new())
+}
+
+#[tauri::command]
+pub async fn get_frozen_spectrum_valleys_points(
+    id: usize,
+    handler: tauri::State<'_, SpectrumHandler>,
+    window: tauri::Window
+) -> Result<Vec<(f64, f64)>, ()> {
+    let points = handler.get_frozen_spectrum_valleys_points(id, get_svg_size(window));
+    Ok(points.unwrap_or(vec![]))
 }
 
 #[tauri::command]
@@ -154,15 +195,7 @@ pub fn save_frozen_spectrum(
     }
 }
 
-#[tauri::command]
-pub fn save_continuous(save: bool, handler:tauri::State<SpectrumHandler>) {
-    handler.saving_new.store(save, atomic::Ordering::Relaxed);
-}
-
-#[tauri::command]
-pub fn get_saving(handler: tauri::State<SpectrumHandler>) -> bool {
-    handler.saving_new.load(atomic::Ordering::Relaxed)
-}
+// Region: Acquisitor functions ------------------------------------------------
 
 #[tauri::command]
 pub fn get_connection_state(handler: tauri::State<SpectrumHandler>) -> HandlerState {
