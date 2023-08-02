@@ -57,6 +57,7 @@ pub enum ActiveSide {
 #[component]
 fn Main<G: Html>(cx: Scope) -> View<G> {
     let traces = create_signal(cx, vec![new_trace(0, true, true)]);
+    // let active_trace = create_signal(cx, new_trace(0, true, true))
 
     let svg_size = create_signal(cx, (0i32, 0i32));
 

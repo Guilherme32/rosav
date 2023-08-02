@@ -55,28 +55,10 @@ pub fn default_config() -> ImonConfig {
     ImonConfig {
         exposure_ms: 10.0,
         read_delay_ms: 100,
-        // calibration: ImonCalibration { // TODO remove
-        //     wavelength_fit: [
-        //         1.596227e3,
-        //         -1.380588e-1,
-        //         -6.197645e-5,
-        //         -5.290868e-9,
-        //         4.363884e-12,
-        //         -3.879178e-15,
-        //     ],
-        //     temperature_coeffs: [1.593802e-6, -2.178398e-5, -3.364313e-3, 5.350232e-2],
-        // },
     }
 }
 
 // Region Helper declarations --------------------------------------------------
-
-// TODO remove
-// #[derive(Debug, Clone, Serialize, Deserialize)]
-// pub struct ImonCalibration {
-//     pub wavelength_fit: [f64; 6],
-//     pub temperature_coeffs: [f64; 4],
-// }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct ImonCoefficients {
@@ -96,6 +78,7 @@ struct ConnectedImon {
     port: Arc<Mutex<Box<dyn SerialPort>>>,
     n_pixels: u32,
     coefficients: ImonCoefficients,
+    dark_pixels: Vec<u32>,
 }
 
 #[derive(Debug)]
@@ -144,6 +127,9 @@ pub enum ImonError {
 
     #[error("Comando não foi respondido da forma esperada")]
     UnexpectedResponse,
+
+    #[error("A fonte parece estar ligada. Ela deve estar desconectada para conectar o IMON")]
+    SourceTurnedOn,
 }
 
 // Region: required impls ------------------------------------------------------
@@ -151,6 +137,7 @@ pub enum ImonError {
 impl Imon {
     pub fn connect(&self) -> Result<(), Box<dyn Error>> {
         let mut state = self.state.lock().unwrap();
+        let config = self.config.lock().unwrap();
 
         match &*state {
             ImonState::Disconnected => (),
@@ -176,7 +163,7 @@ impl Imon {
             }
         };
 
-        let connected_imon = match parse_imon_parameters(port) {
+        let connected_imon = match parse_imon_parameters(port, &config) {
             Ok(parsed) => parsed,
             Err(err) => {
                 self.log_war(format!(
@@ -252,6 +239,7 @@ impl Imon {
                 let port_reference = Arc::clone(&connected_imon.port);
                 let n_pixels = connected_imon.n_pixels;
                 let coefficients = connected_imon.coefficients;
+                let dark_pixels = connected_imon.dark_pixels.clone();
 
                 thread::spawn(move || {
                     constant_read(
@@ -265,6 +253,7 @@ impl Imon {
                         port_reference,
                         n_pixels,
                         coefficients,
+                        dark_pixels,
                     );
                 });
 
@@ -385,7 +374,10 @@ fn is_imon(port: SerialPortInfo) -> Result<Box<dyn SerialPort>, Box<dyn Error>> 
     Err(Box::new(ImonError::NotImon))
 }
 
-fn parse_imon_parameters(mut port: Box<dyn SerialPort>) -> Result<ConnectedImon, Box<dyn Error>> {
+fn parse_imon_parameters(
+    mut port: Box<dyn SerialPort>,
+    config: &ImonConfig,
+) -> Result<ConnectedImon, Box<dyn Error>> {
     port.clear(ClearBuffer::Input)?;
     port.write(b"*para:basic?\r")?;
 
@@ -410,10 +402,26 @@ fn parse_imon_parameters(mut port: Box<dyn SerialPort>) -> Result<ConnectedImon,
     let coefficients = fetch_coefficients(&mut port)?;
 
     if let Some(n_pixels) = n_pixels {
+        sleep(Duration::from_millis(10));
+
+        let dark_pixels = get_raw_pixel_readings(&mut port, config, n_pixels)?;
+        if dark_pixels.len() != n_pixels as usize {
+            return Err(Box::new(ImonError::ParseError));
+        }
+
+        // Unwrap explanation: Length checked above
+        if dark_pixels.iter().filter(|x| **x != 0).max().unwrap()
+            - dark_pixels.iter().min().unwrap()
+            > 500
+        {
+            return Err(Box::new(ImonError::SourceTurnedOn));
+        }
+
         return Ok(ConnectedImon {
             port: Arc::new(Mutex::new(port)),
             n_pixels,
             coefficients,
+            dark_pixels,
         });
     }
 
@@ -455,10 +463,6 @@ fn fetch_coefficients(port: &mut Box<dyn SerialPort>) -> Result<ImonCoefficients
     Ok(coefficients)
 }
 
-// fn wait_complete_response() -> Result<(), Box<dyn Error>> {
-
-// }
-
 fn constant_read(
     last_spectrum: Arc<Mutex<Option<Spectrum>>>,
     new_spectrum: Arc<AtomicBool>,
@@ -470,6 +474,7 @@ fn constant_read(
     port: Arc<Mutex<Box<dyn SerialPort>>>,
     n_pixels: u32,
     coefficients: ImonCoefficients,
+    dark_pixels: Vec<u32>,
 ) {
     let mut config = default_config();
     loop {
@@ -487,7 +492,7 @@ fn constant_read(
 
         for i in 0..10 {
             // Tries to get the spectrum 10 times
-            match get_spectrum(&mut *port, &config, n_pixels, &coefficients) {
+            match get_spectrum(&mut *port, &config, n_pixels, &coefficients, &dark_pixels) {
                 Ok(spectrum) => {
                     if saving.load(Ordering::Relaxed) {
                         let _ = auto_save_spectrum(&spectrum, &auto_save_path);
@@ -528,12 +533,11 @@ fn constant_read(
     }
 }
 
-fn get_spectrum(
+pub fn get_raw_pixel_readings(
     port: &mut Box<dyn SerialPort>,
     config: &ImonConfig,
     n_pixels: u32,
-    coefficients: &ImonCoefficients,
-) -> Result<Spectrum, Box<dyn Error>> {
+) -> Result<Vec<u32>, Box<dyn Error>> {
     let command = format!(
         "*meas {:.3} 1 3\r", // *meas tint (ms) av format<CR>
         config.exposure_ms
@@ -547,7 +551,7 @@ fn get_spectrum(
 
     check_ack(port)?;
 
-    sleep(Duration::from_micros((config.exposure_ms) as u64 + 1));
+    sleep(Duration::from_millis((config.exposure_ms) as u64 + 1));
 
     'check_bell: {
         // Searches for the bell (reading complete)
@@ -582,6 +586,18 @@ fn get_spectrum(
     // TODO find out how this checksum works
     let _checksum: u32 = buffer_two[0] as u32 + (buffer_two[1] as u32) << 8;
 
+    Ok(pixel_readings)
+}
+
+fn get_spectrum(
+    port: &mut Box<dyn SerialPort>,
+    config: &ImonConfig,
+    n_pixels: u32,
+    coefficients: &ImonCoefficients,
+    dark_pixels: &Vec<u32>,
+) -> Result<Spectrum, Box<dyn Error>> {
+    let pixel_readings = get_raw_pixel_readings(port, config, n_pixels)?;
+
     let temperature = match get_temperature(port) {
         Ok(temperature) => temperature,
         Err(_) => 25.314,
@@ -591,6 +607,7 @@ fn get_spectrum(
         &pixel_readings,
         temperature,
         coefficients,
+        &dark_pixels,
     ))
 }
 
@@ -663,6 +680,7 @@ impl Spectrum {
         pixel_readings: &[u32],
         temperature: f64,
         coefficients: &ImonCoefficients,
+        dark_pixels: &Vec<u32>,
     ) -> Spectrum {
         let t_alpha = coefficients.temperature[0];
         let t_alpha_0 = coefficients.temperature[1];
@@ -675,10 +693,17 @@ impl Spectrum {
             let linear = false;
             let pwr: f64 = match linear {
                 true => *reading as f64,
-                false => ((*reading as f64) / 409.6).log10(),
+                false => {
+                    let reading_compensated = (*reading as f64) - (dark_pixels[pixel] as f64);
+                    let mut reading_compensated = reading_compensated;
+                    if reading_compensated < 1.0 {
+                        reading_compensated = 1.0;
+                    }
+
+                    10.0 * reading_compensated.log10() // for power: db = 10 log10(linear)
+                }
             };
 
-            let pwr = if pwr < -100.0 { -100.0 } else { pwr };
             let mut wl: f64 = 0.0;
 
             for (j, coef) in coefficients.wavelength.iter().enumerate() {
@@ -694,6 +719,9 @@ impl Spectrum {
         }
 
         let values = values.into_iter().rev().collect();
-        Spectrum { values, valleys: None }
+        Spectrum {
+            values,
+            valleys: None,
+        }
     }
 }

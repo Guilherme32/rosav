@@ -1,30 +1,29 @@
-use sycamore::{ rt, prelude::* };
-use sycamore::futures::spawn_local_scoped;
 use gloo_timers::future::TimeoutFuture;
+use sycamore::futures::spawn_local_scoped;
+use sycamore::{prelude::*, rt};
 
 use crate::api::*;
-use acquisitors::*;
 use crate::trace::*;
 use crate::ActiveSide;
+use acquisitors::*;
 
 mod acquisitor_config_renders;
 use acquisitor_config_renders::*;
-
 
 #[derive(Prop)]
 pub struct SideBarProps<'a> {
     traces: &'a Signal<Vec<Trace>>,
     saving: &'a Signal<bool>,
-    active_side: &'a ReadSignal<ActiveSide>
+    active_side: &'a ReadSignal<ActiveSide>,
 }
 
 #[component]
-pub fn SideBar<'a, G:Html>(cx: Scope<'a>, props: SideBarProps<'a>) -> View<G> {
+pub fn SideBar<'a, G: Html>(cx: Scope<'a>, props: SideBarProps<'a>) -> View<G> {
     view! { cx,
         div(class="side-bar") {
             (match *props.active_side.get() {
-                ActiveSide::Traces => 
-                    view! { cx, 
+                ActiveSide::Traces =>
+                    view! { cx,
                         SideBarMain(
                             traces=props.traces,
                             saving=props.saving
@@ -44,14 +43,15 @@ pub fn SideBar<'a, G:Html>(cx: Scope<'a>, props: SideBarProps<'a>) -> View<G> {
 struct RenderTraceProps<'a> {
     trace: Trace,
     traces_list: &'a Signal<Vec<Trace>>,
-    saving: &'a Signal<bool>
+    saving: &'a Signal<bool>,
 }
 
 async fn freeze_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
     let mut traces_list = traces_list.modify();
 
     let trace = &mut traces_list[id as usize];
-    if trace.svg_path.len() == 0 {        // Nao pode congelar onde não tem espectro
+    if trace.svg_path.len() == 0 {
+        // Nao pode congelar onde não tem espectro
         return ();
     }
 
@@ -61,7 +61,7 @@ async fn freeze_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
     let visible = trace.visible;
     let draw_valleys = trace.draw_valleys;
 
-    traces_list.push(new_trace(id+1, visible, draw_valleys));
+    traces_list.push(new_trace(id + 1, visible, draw_valleys));
 
     freeze_spectrum().await;
 }
@@ -96,39 +96,39 @@ async fn draw_valleys_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) 
 }
 
 #[component]
-fn RenderTrace<'a, G:Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<G> {
-    let freeze = move |_| {
+fn RenderTrace<'a, G: Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<G> {
+    let click_freeze = move |_| {
         spawn_local_scoped(cx, async move {
             freeze_callback(props.trace.id, props.traces_list).await;
         })
     };
-    let delete = move |_| {
+    let click_delete = move |_| {
         spawn_local_scoped(cx, async move {
             delete_callback(props.trace.id, props.traces_list).await;
         })
     };
-    let visibility = move |_| {
+    let click_visibility = move |_| {
         spawn_local_scoped(cx, async move {
             visibility_callback(props.trace.id, props.traces_list).await;
         })
     };
-    let save_frozen = move |_| {
+    let click_save_frozen = move |_| {
         spawn_local_scoped(cx, async move {
             save_frozen_callback(props.trace.id, props.traces_list).await;
         })
     };
-    let save_continuous = move |_| {
+    let click_save_continuous = move |_| {
         spawn_local_scoped(cx, async move {
             save_continuous_callback(props.saving).await;
         })
     };
-    let draw_valleys = move |_| {
+    let click_draw_valleys = move |_| {
         spawn_local_scoped(cx, async move {
             draw_valleys_callback(props.trace.id, props.traces_list).await;
         })
     };
 
-    view! { cx, 
+    view! { cx,
         div(class="trace") {
             span(class="name", style=trace_id_to_style(props.trace.id)) {
                 (trace_id_to_name(props.trace.id))
@@ -141,30 +141,30 @@ fn RenderTrace<'a, G:Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<G
             }
             div(class="buttons") {
                 (match props.trace.active {
-                    true => view! { cx, button(on:click=freeze) { " " } },
-                    false => view! { cx, button(on:click=delete) { "󰜺 " } }
+                    true => view! { cx, button(on:click=click_freeze) { " " } },
+                    false => view! { cx, button(on:click=click_delete) { "󰜺 " } }
                 })
 
                 (if props.trace.visible {
-                    view! { cx, button(on:click=visibility) { " " } }
+                    view! { cx, button(on:click=click_visibility) { " " } }
                 } else {
-                    view! { cx, button(on:click=visibility) { " " } }
+                    view! { cx, button(on:click=click_visibility) { " " } }
                 })
 
                 (if props.trace.active {
                     if *props.saving.get() {
-                        view! { cx, button(on:click=save_continuous) { "󱧹 " } }
+                        view! { cx, button(on:click=click_save_continuous) { "󱧹 " } }
                     } else {
-                        view! { cx, button(on:click=save_continuous) { "󱃩 " } }
+                        view! { cx, button(on:click=click_save_continuous) { "󱃩 " } }
                     }
                 } else {
-                    view! { cx, button(on:click=save_frozen) { " " } }
+                    view! { cx, button(on:click=click_save_frozen) { " " } }
                 })
 
                 (if props.trace.draw_valleys {
-                    view! { cx, button(on:click=draw_valleys) { "󰽅 " } }
+                    view! { cx, button(on:click=click_draw_valleys) { "󰽅 " } }
                 } else {
-                    view! { cx, button(on:click=draw_valleys) { "󰆤 " } }
+                    view! { cx, button(on:click=click_draw_valleys) { "󰆤 " } }
                 })
             }
         }
@@ -174,33 +174,43 @@ fn RenderTrace<'a, G:Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<G
 #[derive(Prop)]
 struct SideBarMainProps<'a> {
     traces: &'a Signal<Vec<Trace>>,
-    saving: &'a Signal<bool>
+    saving: &'a Signal<bool>,
 }
 
 #[component]
-fn SideBarMain<'a, G:Html>(cx: Scope<'a>, props: SideBarMainProps<'a>) -> View<G> {
+fn SideBarMain<'a, G: Html>(cx: Scope<'a>, props: SideBarMainProps<'a>) -> View<G> {
     view! { cx,
         div(class="side-bar-main") {
             p(class="title") { "Traços" }
 
             div(class="side-container back") {
-                Indexed(
+                Keyed(        // Only re-renders on key change
                     iterable = props.traces,
-                    view = move |cx, trace| view! { 
+                    view = move |cx, trace| view! {
                         cx, RenderTrace(
                             trace=trace,
                             traces_list=&props.traces,
                             saving=&props.saving
                         )
-                    }
+                    },
+                    key = |trace| trace_info_identifier(trace)
                 )
             }
         }
     }
 }
 
+fn trace_info_identifier(trace: &Trace) -> u64 {
+    let active: u64 = trace.active as u64;
+    let visible: u64 = (trace.visible as u64) * 2;
+    let draw_valleys: u64 = (trace.draw_valleys as u64) * 4;
+    let id: u64 = (trace.id as u64) * 8;
+
+    return active + visible + draw_valleys + id;
+}
+
 #[component]
-fn LogSpace<G:Html>(cx: Scope) -> View<G> {
+fn LogSpace<G: Html>(cx: Scope) -> View<G> {
     let logs = create_signal(cx, Vec::<Log>::with_capacity(30));
 
     spawn_local_scoped(cx, async move {
@@ -229,10 +239,10 @@ fn LogSpace<G:Html>(cx: Scope) -> View<G> {
 }
 
 #[component]
-fn ConfigWindow<G:Html>(cx: Scope) -> View<G> {
+fn ConfigWindow<G: Html>(cx: Scope) -> View<G> {
     let handler_config = create_signal(cx, empty_handler_config());
 
-    view! { cx, 
+    view! { cx,
         div(class="side-bar-main") {
             div(class="side-container back config") {
                 p(class="title") { "Configurações" }
@@ -245,11 +255,11 @@ fn ConfigWindow<G:Html>(cx: Scope) -> View<G> {
 
 #[derive(Prop)]
 struct HandlerConfigProps<'a> {
-    config: &'a Signal<HandlerConfig>
+    config: &'a Signal<HandlerConfig>,
 }
 
 #[component]
-fn RenderHandlerConfig<'a, G:Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>) -> View<G> {
+fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>) -> View<G> {
     let wl_min = create_signal(cx, String::new());
     let wl_max = create_signal(cx, String::new());
 
@@ -258,31 +268,34 @@ fn RenderHandlerConfig<'a, G:Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>)
 
     let acquisitor = create_signal(cx, String::new());
 
-    spawn_local_scoped(cx, async move {                // Get old config
+    spawn_local_scoped(cx, async move {
+        // Get old config
         let _config = get_handler_config().await;
-        if let Some(wl_limits) = _config.wavelength_limits {        // Update wl limits input
+        if let Some(wl_limits) = _config.wavelength_limits {
+            // Update wl limits input
             wl_min.set(format!("{:.1}", wl_limits.0 * 1e9));
             wl_max.set(format!("{:.1}", wl_limits.1 * 1e9));
         }
 
-        if let Some(pwr_limits) = _config.power_limits {            // Update pwr limits input
+        if let Some(pwr_limits) = _config.power_limits {
+            // Update pwr limits input
             pwr_min.set(format!("{}", pwr_limits.0));
             pwr_max.set(format!("{}", pwr_limits.1));
         }
 
         match _config.acquisitor {
             AcquisitorSimple::FileReader => acquisitor.set("file_reader".to_string()),
-            AcquisitorSimple::Imon => acquisitor.set("imon".to_string())
+            AcquisitorSimple::Imon => acquisitor.set("imon".to_string()),
         }
 
-        props.config.set(_config);                                        // Update whole config
+        props.config.set(_config); // Update whole config
     });
 
     let update_save_path = move |_| {
         spawn_local_scoped(cx, async move {
             match pick_folder().await {
                 None => (),
-                Some(path) => (*props.config.modify()).auto_save_path = path
+                Some(path) => (*props.config.modify()).auto_save_path = path,
             }
         });
     };
@@ -297,17 +310,14 @@ fn RenderHandlerConfig<'a, G:Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>)
         update_power_limits(pwr_min, pwr_max, props.config);
     };
 
-    let acquisitor_select = move |_| {
-        match (*acquisitor.get()).as_str() {
-            "file_reader" =>
-                (*props.config.modify()).acquisitor = AcquisitorSimple::FileReader,
-            "imon" =>
-                (*props.config.modify()).acquisitor = AcquisitorSimple::Imon,
-            _ => ()
-        }
+    let acquisitor_select = move |_| match (*acquisitor.get()).as_str() {
+        "file_reader" => (*props.config.modify()).acquisitor = AcquisitorSimple::FileReader,
+        "imon" => (*props.config.modify()).acquisitor = AcquisitorSimple::Imon,
+        _ => (),
     };
 
-    create_effect(cx, move || {                    // Apply config when it is updated
+    create_effect(cx, move || {
+        // Apply config when it is updated
         props.config.track();
         spawn_local_scoped(cx, async move {
             if *props.config.get() != empty_handler_config() {
@@ -316,7 +326,7 @@ fn RenderHandlerConfig<'a, G:Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>)
         });
     });
 
-    view! { cx, 
+    view! { cx,
         form(class="side-container back config", on:submit=update_limits) {
             input(type="submit", style="display: none;")
 
@@ -324,7 +334,7 @@ fn RenderHandlerConfig<'a, G:Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>)
 
             div(class="element") {
                 p { "Caminho do auto save:" }
-                p { 
+                p {
                     button(on:click=update_save_path) { " " }
                     (save_path.get())
                 }
@@ -382,19 +392,19 @@ fn RenderHandlerConfig<'a, G:Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>)
 fn update_wavelength_limits(
     wl_min: &ReadSignal<String>,
     wl_max: &ReadSignal<String>,
-    config: &Signal<HandlerConfig>
+    config: &Signal<HandlerConfig>,
 ) {
     let new_limits: Option<(f64, f64)>;
 
     if wl_min.get().len() == 0 || wl_max.get().len() == 0 {
         new_limits = None;
-    } else {
+    } else {
         let min_float = wl_min.get().parse::<f64>();
         let max_float = wl_max.get().parse::<f64>();
 
         new_limits = match (min_float, max_float) {
             (Ok(min), Ok(max)) => Some((min * 1e-9, max * 1e-9)),
-            (_, _) => None
+            (_, _) => None,
         };
     }
 
@@ -406,20 +416,19 @@ fn update_wavelength_limits(
 fn update_power_limits(
     pwr_min: &ReadSignal<String>,
     pwr_max: &ReadSignal<String>,
-    config: &Signal<HandlerConfig>
+    config: &Signal<HandlerConfig>,
 ) {
     let new_limits: Option<(f64, f64)>;
 
     if pwr_min.get().len() == 0 || pwr_max.get().len() == 0 {
         new_limits = None;
     } else {
-
         let min_float = pwr_min.get().parse::<f64>();
         let max_float = pwr_max.get().parse::<f64>();
 
         new_limits = match (min_float, max_float) {
             (Ok(min), Ok(max)) => Some((min, max)),
-            (_, _) => None
+            (_, _) => None,
         };
     }
 
@@ -438,20 +447,19 @@ fn check_number_input(input: &Signal<String>) {
 
 #[derive(Prop)]
 struct AcquisitorConfigProps<'a> {
-    handler_config: &'a Signal<HandlerConfig>
+    handler_config: &'a Signal<HandlerConfig>,
 }
 
 #[component]
-fn RenderAcquisitorConfig<'a, G:Html>(cx: Scope<'a>, props: AcquisitorConfigProps<'a>) -> View<G> {
-    view! { cx, 
+fn RenderAcquisitorConfig<'a, G: Html>(cx: Scope<'a>, props: AcquisitorConfigProps<'a>) -> View<G> {
+    view! { cx,
         (match props.handler_config.get().acquisitor {
-            AcquisitorSimple::FileReader => view! { cx, 
+            AcquisitorSimple::FileReader => view! { cx,
                 RenderFileReaderConfig {}
             },
-            AcquisitorSimple::Imon => view! { cx, 
+            AcquisitorSimple::Imon => view! { cx,
                 RenderImonConfig {}
             }
         })
     }
 }
-
