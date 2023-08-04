@@ -45,6 +45,7 @@ fn main() {
             get_wavelength_limits,
             get_power_limits,
             get_time,
+            get_valley_detection,
             freeze_spectrum,
             delete_frozen_spectrum,
             get_frozen_spectrum_path,

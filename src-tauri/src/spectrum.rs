@@ -28,6 +28,7 @@ pub struct Info {
     pub name: Option<String>,
     pub save_time: String,
     pub valleys: Option<Vec<SpectrumValue>>,
+    pub valley_detection: ValleyDetection,
     pub peaks: Option<Vec<SpectrumValue>>,
 }
 
@@ -35,6 +36,15 @@ pub struct Info {
 pub struct Limits {
     pub wavelength: (f64, f64),
     pub power: (f64, f64),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(tag = "type")]
+pub enum ValleyDetection {
+    None,
+    Simple { prominence: f64 },
+    Lorentz { prominence: f64 },
+    Gauss { prominence: f64 },
 }
 
 impl Info {
@@ -45,6 +55,7 @@ impl Info {
             name: None,
             save_time,
             valleys: None,
+            valley_detection: ValleyDetection::None,
             peaks: None,
         }
     }
@@ -241,7 +252,16 @@ impl Spectrum {
 }
 
 impl Spectrum {
-    pub fn get_valleys(&mut self) -> &Vec<SpectrumValue> {
+    pub fn get_valleys(&mut self, method: ValleyDetection) -> Option<&Vec<SpectrumValue>> {
+        match method {
+            ValleyDetection::None => None,
+            ValleyDetection::Simple { prominence } => Some(self.get_valleys_simple(prominence)),
+            ValleyDetection::Lorentz { prominence } => Some(self.get_valleys_lorentz(prominence)),
+            ValleyDetection::Gauss { prominence } => Some(self.get_valleys_gauss(prominence)),
+        }
+    }
+
+    pub fn get_valleys_simple(&mut self, prominence: f64) -> &Vec<SpectrumValue> {
         let powers: Vec<f64> = self
             .values
             .iter()
@@ -249,7 +269,7 @@ impl Spectrum {
             .collect();
 
         let mut peak_finder = PeakFinder::new(&powers);
-        peak_finder.with_min_prominence(1.0); // TODO to config
+        peak_finder.with_min_prominence(prominence);
 
         let valleys: Vec<SpectrumValue> = peak_finder
             .find_peaks()
@@ -258,9 +278,20 @@ impl Spectrum {
             .collect();
 
         self.info.valleys = Some(valleys);
+        self.info.valley_detection = ValleyDetection::Simple { prominence };
 
         // Can unwrap, just put it in a Some
         (self.info.valleys.as_ref()).unwrap()
+    }
+
+    pub fn get_valleys_lorentz(&mut self, prominence: f64) -> &Vec<SpectrumValue> {
+        println!("Lorentz approximation not yet implemented!!!");
+        self.get_valleys_simple(prominence)
+    }
+
+    pub fn get_valleys_gauss(&mut self, prominence: f64) -> &Vec<SpectrumValue> {
+        println!("Gauss approximation not yet implemented!!!");
+        self.get_valleys_simple(prominence)
     }
 
     // TODO implement different methods: None, Simple, Lorentz, Gauss
@@ -268,17 +299,23 @@ impl Spectrum {
         &mut self,
         svg_limits: (u32, u32),
         graph_limits: &Limits,
+        method: ValleyDetection,
     ) -> Vec<(f64, f64)> {
         let svg_limits = (svg_limits.0 as f64 - 40.0, svg_limits.1 as f64 - 16.6);
 
-        let valleys = match &self.info.valleys {
-            Some(valleys) => valleys,
-            None => self.get_valleys(),
+        let valleys_option = if method == self.info.valley_detection {
+            self.info.valleys.as_ref()
+        } else {
+            self.get_valleys(method)
         };
 
-        valleys
-            .iter()
-            .map(|valley| convert_point(graph_limits, &svg_limits, valley))
-            .collect()
+        valleys_option
+            .map(|valleys| {
+                valleys
+                    .iter()
+                    .map(|valley| convert_point(graph_limits, &svg_limits, valley))
+                    .collect()
+            })
+            .unwrap_or(vec![])
     }
 }

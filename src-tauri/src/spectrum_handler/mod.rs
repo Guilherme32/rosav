@@ -27,6 +27,7 @@ pub struct HandlerConfig {
     pub wavelength_limits: Option<(f64, f64)>,
     pub power_limits: Option<(f64, f64)>,
     pub acquisitor: AcquisitorSimple,
+    pub valley_detection: ValleyDetection,
 }
 
 #[derive(Debug)]
@@ -139,11 +140,14 @@ impl SpectrumHandler {
         svg_limits: (u32, u32),
     ) -> Option<Vec<(f64, f64)>> {
         let mut spectrum = self.last_spectrum.lock().unwrap();
+        let config = self.config.lock().unwrap();
+        let method = config.valley_detection.clone();
+        drop(config); // Get_limits will also ask for it, making a *deadlock*
 
         if let Some(spectrum_limits) = self.get_limits() {
             (*spectrum)
                 .as_mut()
-                .map(|spectrum| spectrum.get_valleys_points(svg_limits, &spectrum_limits))
+                .map(|spectrum| spectrum.get_valleys_points(svg_limits, &spectrum_limits, method))
         } else {
             None
         }
@@ -216,6 +220,11 @@ impl SpectrumHandler {
             .map(|spectrum| spectrum.limits.power.1)
             .fold(f64::NEG_INFINITY, |acc, new| acc.max(new))
     }
+
+    pub fn get_valley_detection(&self) -> ValleyDetection {
+        let config = self.config.lock().unwrap();
+        config.valley_detection.clone()
+    }
 }
 
 // Region: Frozen stuff ---------------------------------------------------------
@@ -277,6 +286,9 @@ impl SpectrumHandler {
         svg_limits: (u32, u32),
     ) -> Option<Vec<(f64, f64)>> {
         let mut frozen_list = self.frozen_spectra.lock().unwrap();
+        let config = self.config.lock().unwrap();
+        let method = config.valley_detection.clone();
+        drop(config); // Get_limits will also ask for it, making a *deadlock*
 
         if id >= frozen_list.len() {
             self.log_error(
@@ -289,8 +301,9 @@ impl SpectrumHandler {
 
         let spectrum = &mut frozen_list[id];
 
-        self.get_limits()
-            .map(|spectrum_limits| spectrum.get_valleys_points(svg_limits, &spectrum_limits))
+        self.get_limits().map(|spectrum_limits| {
+            spectrum.get_valleys_points(svg_limits, &spectrum_limits, method)
+        })
     }
 
     pub fn clone_frozen(&self, id: usize) -> Option<Spectrum> {
@@ -358,6 +371,7 @@ pub fn default_config() -> HandlerConfig {
         wavelength_limits: None,
         power_limits: None,
         acquisitor: AcquisitorSimple::FileReader,
+        valley_detection: ValleyDetection::Simple { prominence: 3.0 },
     }
 }
 

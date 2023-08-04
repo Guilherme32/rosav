@@ -42,11 +42,21 @@ pub enum ConnectionState {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(tag = "type")]
+pub enum ValleyDetection {
+    None,
+    Simple { prominence: f64 },
+    Lorentz { prominence: f64 },
+    Gauss { prominence: f64 },
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct HandlerConfig {
     pub auto_save_path: PathBuf,
     pub wavelength_limits: Option<(f64, f64)>,
     pub power_limits: Option<(f64, f64)>,
     pub acquisitor: acquisitors::AcquisitorSimple,
+    pub valley_detection: ValleyDetection,
 }
 
 pub fn empty_handler_config() -> HandlerConfig {
@@ -55,6 +65,7 @@ pub fn empty_handler_config() -> HandlerConfig {
         wavelength_limits: None,
         power_limits: None,
         acquisitor: AcquisitorSimple::FileReader,
+        valley_detection: ValleyDetection::None,
     }
 }
 
@@ -139,6 +150,13 @@ pub async fn get_power_limits() -> (f64, f64) {
 pub async fn get_time() -> String {
     let from_back = invoke("get_time", to_value(&()).unwrap()).await;
     let obj_rebuilt: String = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}
+
+pub async fn get_valley_detection() -> ValleyDetection {
+    let from_back = invoke("get_valley_detection", to_value(&()).unwrap()).await;
+    let obj_rebuilt: ValleyDetection = from_value(from_back).unwrap();
 
     obj_rebuilt
 }

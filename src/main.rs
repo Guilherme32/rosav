@@ -39,11 +39,13 @@ async fn get_trace_info() -> TraceInfo {
     let svg_size = get_svg_size().await;
     let wavelength_limits = get_wavelength_limits().await;
     let power_limits = get_power_limits().await;
+    let valley_detection = get_valley_detection().await;
 
     TraceInfo {
         svg_size,
         wavelength_limits,
         power_limits,
+        valley_detection,
     }
 }
 
@@ -83,7 +85,7 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
         }
     });
 
-    // Update on window update
+    // Update on window / config / info update
     spawn_local_scoped(cx, async move {
         loop {
             TimeoutFuture::new(200).await; // 5 fps, #TODO send to config / use as event

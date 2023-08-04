@@ -1,6 +1,7 @@
 use gloo_timers::future::TimeoutFuture;
 use sycamore::futures::spawn_local_scoped;
 use sycamore::{prelude::*, rt};
+use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::api::*;
 use crate::trace::*;
@@ -253,6 +254,11 @@ fn ConfigWindow<G: Html>(cx: Scope) -> View<G> {
     }
 }
 
+#[wasm_bindgen(inline_js = "export function blur() { document.activeElement.blur(); }")]
+extern "C" {
+    fn blur();
+}
+
 #[derive(Prop)]
 struct HandlerConfigProps<'a> {
     config: &'a Signal<HandlerConfig>,
@@ -265,6 +271,9 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
 
     let pwr_min = create_signal(cx, String::new());
     let pwr_max = create_signal(cx, String::new());
+
+    let prominence = create_signal(cx, String::new());
+    let valley_detection = create_signal(cx, String::new());
 
     let acquisitor = create_signal(cx, String::new());
 
@@ -288,8 +297,34 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
             AcquisitorSimple::Imon => acquisitor.set("imon".to_string()),
         }
 
+        let _prominence = match _config.valley_detection {
+            ValleyDetection::None => {
+                valley_detection.set("none".to_string());
+                3.0
+            }
+            ValleyDetection::Simple { prominence } => {
+                valley_detection.set("simple".to_string());
+                prominence
+            }
+            ValleyDetection::Lorentz { prominence } => {
+                valley_detection.set("lorentz".to_string());
+                prominence
+            }
+            ValleyDetection::Gauss { prominence } => {
+                valley_detection.set("gauss".to_string());
+                prominence
+            }
+        };
+
+        prominence.set(_prominence.to_string());
+
         props.config.set(_config); // Update whole config
     });
+
+    let unfocus = move |event: rt::Event| {
+        blur();
+        event.prevent_default();
+    };
 
     let update_save_path = move |_| {
         spawn_local_scoped(cx, async move {
@@ -304,8 +339,7 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
         format!("{}", (*props.config.get()).auto_save_path.display())
     });
 
-    let update_limits = move |event: rt::Event| {
-        event.prevent_default();
+    let update_limits = move |_| {
         update_wavelength_limits(wl_min, wl_max, props.config);
         update_power_limits(pwr_min, pwr_max, props.config);
     };
@@ -314,6 +348,32 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
         "file_reader" => (*props.config.modify()).acquisitor = AcquisitorSimple::FileReader,
         "imon" => (*props.config.modify()).acquisitor = AcquisitorSimple::Imon,
         _ => (),
+    };
+
+    let valley_detection_select = move |_| {
+        let prominence_result = prominence.get().parse::<f64>();
+        match prominence_result {
+            Ok(prominence) => match (*valley_detection.get()).as_str() {
+                "none" => (*props.config.modify()).valley_detection = ValleyDetection::None,
+                "simple" => {
+                    (*props.config.modify()).valley_detection =
+                        ValleyDetection::Simple { prominence }
+                }
+                "lorentz" => {
+                    (*props.config.modify()).valley_detection =
+                        ValleyDetection::Lorentz { prominence }
+                }
+                "gauss" => {
+                    (*props.config.modify()).valley_detection =
+                        ValleyDetection::Gauss { prominence }
+                }
+                _ => (),
+            },
+            Err(_) => {
+                prominence.set("3".to_string());
+                return;
+            }
+        }
     };
 
     create_effect(cx, move || {
@@ -327,7 +387,7 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
     });
 
     view! { cx,
-        form(class="side-container back config", on:submit=update_limits) {
+        form(class="side-container back config", on:submit=unfocus) {
             input(type="submit", style="display: none;")
 
             p(class="mini-title") { "Backend Geral" }
@@ -369,6 +429,32 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
                         bind:value=pwr_max,
                         on:input=|_| check_number_input(pwr_max),
                         on:focusout=update_limits
+                    ) {}
+                    "(dB)"
+                }
+            }
+
+            div(class="element") {
+                p { "Detecção de vale:" }
+                select(
+                    name="valley_detection",
+                    bind:value=valley_detection,
+                    on:input=valley_detection_select
+                ) {
+                    option(value="none") { "Nenhuma" }
+                    option(value="simple") { "Simples" }
+                    option(value="lorentz") { "Lorentziana" }
+                    option(value="gauss") { "Gaussiana" }
+                }
+            }
+
+            div(class="element") {
+                p { "Proeminência mínima:"}
+                p {
+                    input(
+                        bind:value=prominence,
+                        on:input=|_| check_number_input(prominence),
+                        on:focusout=valley_detection_select
                     ) {}
                     "(dB)"
                 }

@@ -4,6 +4,7 @@ use std::sync::{atomic, mpsc, Mutex};
 use tauri::api::dialog::{blocking, FileDialogBuilder};
 
 use crate::*;
+use spectrum::ValleyDetection;
 use spectrum_handler::{AcquisitorConfig, HandlerConfig, SpectrumHandler, State as HandlerState};
 
 use config::{write_acquisitor_config, write_handler_config};
@@ -57,6 +58,11 @@ pub fn get_last_logs(logs: tauri::State<Mutex<mpsc::Receiver<Log>>>) -> Vec<Log>
 #[tauri::command]
 pub fn get_time() -> String {
     Local::now().format("(%H:%M)").to_string()
+}
+
+#[tauri::command]
+pub fn get_valley_detection(handler: tauri::State<SpectrumHandler>) -> ValleyDetection {
+    handler.get_valley_detection()
 }
 
 // Region: Graph / Plot / Spectrum related -------------------------------------
@@ -143,7 +149,9 @@ pub async fn get_last_spectrum_valleys_points(
     handler: tauri::State<'_, SpectrumHandler>,
     window: tauri::Window,
 ) -> Result<Vec<(f64, f64)>, ()> {
+    println!("Get last points!");
     let points = handler.get_last_spectrum_valleys_points(get_svg_size(window));
+    println!("Just got the last points!");
     Ok(points.unwrap_or(vec![]))
 }
 
