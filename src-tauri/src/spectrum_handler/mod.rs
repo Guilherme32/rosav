@@ -126,10 +126,9 @@ impl SpectrumHandler {
 
         if let Some(spectrum_limits) = self.get_limits() {
             self.unread_spectrum.store(false, atomic::Ordering::Relaxed);
-            match &*spectrum {
-                Some(spectrum) => Some(spectrum.to_path(svg_limits, &spectrum_limits)),
-                None => None,
-            }
+            (*spectrum)
+                .as_ref()
+                .map(|spectrum| spectrum.to_path(svg_limits, &spectrum_limits))
         } else {
             None
         }
@@ -142,10 +141,9 @@ impl SpectrumHandler {
         let mut spectrum = self.last_spectrum.lock().unwrap();
 
         if let Some(spectrum_limits) = self.get_limits() {
-            match &mut *spectrum {
-                Some(spectrum) => Some(spectrum.get_valleys_points(svg_limits, &spectrum_limits)),
-                None => None,
-            }
+            (*spectrum)
+                .as_mut()
+                .map(|spectrum| spectrum.get_valleys_points(svg_limits, &spectrum_limits))
         } else {
             None
         }
@@ -170,10 +168,9 @@ impl SpectrumHandler {
                         acc.power.0.min(new.power.0 - 3.0),
                         acc.power.1.max(new.power.1 + 3.0),
                     ),
-                })
-                .clone(),
+                }),
             None => match active_spectrum.as_ref() {
-                Some(spectrum) => (&spectrum.limits).clone(),
+                Some(spectrum) => spectrum.limits.clone(),
                 None => {
                     return;
                 }
@@ -236,7 +233,7 @@ impl SpectrumHandler {
                 fora dos limites"
                     .to_string(),
             );
-            return ();
+            return;
         }
 
         frozen_list.remove(id);
@@ -257,11 +254,8 @@ impl SpectrumHandler {
 
         let spectrum = &frozen_list[id];
 
-        if let Some(spectrum_limits) = self.get_limits() {
-            Some(spectrum.to_path(svg_limits, &spectrum_limits))
-        } else {
-            None
-        }
+        self.get_limits()
+            .map(|spectrum_limits| spectrum.to_path(svg_limits, &spectrum_limits))
     }
 
     pub fn get_frozen_spectrum_valleys_points(
@@ -282,11 +276,8 @@ impl SpectrumHandler {
 
         let spectrum = &mut frozen_list[id];
 
-        if let Some(spectrum_limits) = self.get_limits() {
-            Some(spectrum.get_valleys_points(svg_limits, &spectrum_limits))
-        } else {
-            None
-        }
+        self.get_limits()
+            .map(|spectrum_limits| spectrum.get_valleys_points(svg_limits, &spectrum_limits))
     }
 
     pub fn clone_frozen(&self, id: usize) -> Option<Spectrum> {
@@ -314,7 +305,7 @@ impl SpectrumHandler {
                 id fora dos limites"
                     .to_string(),
             );
-            return ();
+            return;
         }
 
         let spectrum = &frozen_list[id];

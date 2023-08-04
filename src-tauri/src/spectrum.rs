@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use chrono::prelude::*;
 use csv;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -19,13 +20,34 @@ pub struct SpectrumValue {
 pub struct Spectrum {
     pub values: Vec<SpectrumValue>,
     pub limits: Limits,
+    pub info: Info,
+}
+
+#[derive(Debug, Clone)]
+pub struct Info {
+    pub name: Option<String>,
+    pub save_time: String,
     pub valleys: Option<Vec<SpectrumValue>>,
+    pub peaks: Option<Vec<SpectrumValue>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Limits {
     pub wavelength: (f64, f64),
     pub power: (f64, f64),
+}
+
+impl Info {
+    pub fn from_now() -> Info {
+        let save_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+
+        Info {
+            name: None,
+            save_time,
+            valleys: None,
+            peaks: None,
+        }
+    }
 }
 
 impl fmt::Display for Spectrum {
@@ -82,9 +104,11 @@ fn bezier_point(
 
 impl Spectrum {
     pub fn empty() -> Spectrum {
+        let info = Info::from_now();
+
         Spectrum {
             values: vec![],
-            valleys: None,
+            info,
             limits: Limits {
                 wavelength: (0.0, 0.0),
                 power: (0.0, 0.0),
@@ -93,7 +117,7 @@ impl Spectrum {
     }
 
     pub fn from_values(values: Vec<SpectrumValue>) -> Spectrum {
-        if values.len() == 0 {
+        if values.is_empty() {
             return Self::empty();
         }
 
@@ -118,14 +142,15 @@ impl Spectrum {
             power: limits_pwr,
         };
 
+        let info = Info::from_now();
         Spectrum {
             values,
-            valleys: None,
+            info,
             limits,
         }
     }
 
-    pub fn from_str(text: &str) -> Result<Spectrum, Box<dyn Error>> {
+    pub fn from_csv_text(text: &str) -> Result<Spectrum, Box<dyn Error>> {
         let mut csv_reader = csv::ReaderBuilder::new()
             .delimiter(b';')
             .has_headers(false)
@@ -145,11 +170,11 @@ impl Spectrum {
         // let limits_pwr = (graph_limits.power.1, graph_limits.power.0);        // Invert because svg coords
         // let limits_wl = graph_limits.wavelength;    // TODO remove
 
-        if self.values.len() == 0 {
+        if self.values.is_empty() {
             return "".to_string();
         }
 
-        let cvt = |point| convert_point(&graph_limits, &svg_limits, point);
+        let cvt = |point| convert_point(graph_limits, &svg_limits, point);
         let start = cvt(&self.values[0]);
         let start = format!("M {:.2},{:.2} ", start.0, start.1);
 
@@ -166,7 +191,7 @@ impl Spectrum {
             .collect::<String>();
         let path = format!("{start}{path}");
 
-        return path.to_string();
+        path
     }
 
     pub fn get_limits(&self) -> Limits {
@@ -232,8 +257,10 @@ impl Spectrum {
             .map(|peak| self.values[peak.middle_position()].clone())
             .collect();
 
-        self.valleys = Some(valleys);
-        (self.valleys.as_ref()).expect("Just put it in a Some, so should be valid")
+        self.info.valleys = Some(valleys);
+
+        // Can unwrap, just put it in a Some
+        (self.info.valleys.as_ref()).unwrap()
     }
 
     // TODO implement different methods: None, Simple, Lorentz, Gauss
@@ -244,14 +271,14 @@ impl Spectrum {
     ) -> Vec<(f64, f64)> {
         let svg_limits = (svg_limits.0 as f64 - 40.0, svg_limits.1 as f64 - 16.6);
 
-        let valleys = match &self.valleys {
+        let valleys = match &self.info.valleys {
             Some(valleys) => valleys,
             None => self.get_valleys(),
         };
 
         valleys
             .iter()
-            .map(|valley| convert_point(&graph_limits, &svg_limits, valley))
+            .map(|valley| convert_point(graph_limits, &svg_limits, valley))
             .collect()
     }
 }

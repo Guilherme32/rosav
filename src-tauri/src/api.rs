@@ -1,17 +1,12 @@
-use std::sync::{ atomic, Mutex, mpsc };
 use chrono::prelude::*;
-use tauri::api::dialog::{ FileDialogBuilder, blocking };
 use std::path::PathBuf;
+use std::sync::{atomic, mpsc, Mutex};
+use tauri::api::dialog::{blocking, FileDialogBuilder};
 
 use crate::*;
-use spectrum_handler::{
-    State as HandlerState,
-    SpectrumHandler,
-    HandlerConfig,
-    AcquisitorConfig
-};
+use spectrum_handler::{AcquisitorConfig, HandlerConfig, SpectrumHandler, State as HandlerState};
 
-use config::{ write_handler_config, write_acquisitor_config };
+use config::{write_acquisitor_config, write_handler_config};
 
 // TODO change all commands to async
 
@@ -31,28 +26,30 @@ pub fn print_backend(msg: &str) {
 pub fn get_window_size(window: tauri::Window) -> (u32, u32) {
     let win_size = match window.inner_size() {
         Ok(size) => size,
-        Err(_) => return (0, 0)
+        Err(_) => return (0, 0),
     };
     let scale = match window.scale_factor() {
         Ok(scale) => scale,
-        Err(_) => return (0, 0)
+        Err(_) => return (0, 0),
     };
 
-    let compensation =
-        if cfg!(windows) {
-            (0, 0)
-        } else if cfg!(unix) {    // The webkit on my Fedora38 is giving nonsensical values
-            (50, 90)
-        } else {
-            (0, 0)
-        };
+    let compensation = if cfg!(windows) {
+        (0, 0)
+    } else if cfg!(unix) {
+        // The webkit on my Fedora38 is giving nonsensical values
+        (50, 90)
+    } else {
+        (0, 0)
+    };
 
-    (((win_size.width - compensation.0) as f64 / scale).round() as u32, 
-     ((win_size.height - compensation.1) as f64 / scale).round() as u32)
+    (
+        ((win_size.width - compensation.0) as f64 / scale).round() as u32,
+        ((win_size.height - compensation.1) as f64 / scale).round() as u32,
+    )
 }
 
 #[tauri::command]
-pub fn get_last_logs(logs: tauri::State<Mutex<mpsc::Receiver<Log>>>) -> Vec::<Log> {
+pub fn get_last_logs(logs: tauri::State<Mutex<mpsc::Receiver<Log>>>) -> Vec<Log> {
     let logs = logs.lock().unwrap();
     logs.try_recv().into_iter().collect()
 }
@@ -68,13 +65,13 @@ pub fn get_time() -> String {
 #[tauri::command]
 pub fn get_svg_size(window: tauri::Window) -> (u32, u32) {
     let win_size = get_window_size(window);
- 
-    if win_size.0 == 0 {            // if minimized
+
+    if win_size.0 == 0 {
+        // if minimized
         return (0, 0);
     }
 
-    (win_size.0 - 23 - 200,
-     win_size.1 - 27 - 32)
+    (win_size.0 - 23 - 200, win_size.1 - 27 - 32)
 }
 
 #[tauri::command]
@@ -109,25 +106,25 @@ pub fn unread_spectrum(handler: tauri::State<SpectrumHandler>) -> bool {
 #[tauri::command]
 pub fn get_last_spectrum_path(
     handler: tauri::State<SpectrumHandler>,
-    window: tauri::Window
-) -> String
-{
+    window: tauri::Window,
+) -> String {
     handler.update_limits();
-    handler.get_last_spectrum_path(get_svg_size(window)).unwrap_or(String::new())
+    handler
+        .get_last_spectrum_path(get_svg_size(window))
+        .unwrap_or(String::new())
 }
 
 #[tauri::command]
 pub async fn get_last_spectrum_valleys_points(
     handler: tauri::State<'_, SpectrumHandler>,
-    window: tauri::Window
-) -> Result<Vec<(f64, f64)>, ()>
-{
+    window: tauri::Window,
+) -> Result<Vec<(f64, f64)>, ()> {
     let points = handler.get_last_spectrum_valleys_points(get_svg_size(window));
     Ok(points.unwrap_or(vec![]))
 }
 
 #[tauri::command]
-pub fn save_continuous(save: bool, handler:tauri::State<SpectrumHandler>) {
+pub fn save_continuous(save: bool, handler: tauri::State<SpectrumHandler>) {
     handler.saving_new.store(save, atomic::Ordering::Relaxed);
 }
 
@@ -135,7 +132,6 @@ pub fn save_continuous(save: bool, handler:tauri::State<SpectrumHandler>) {
 pub fn get_saving(handler: tauri::State<SpectrumHandler>) -> bool {
     handler.saving_new.load(atomic::Ordering::Relaxed)
 }
-
 
 // SubRegion: Frozen spectra functions -----------------------------------------
 
@@ -153,9 +149,10 @@ pub fn delete_frozen_spectrum(id: usize, handler: tauri::State<SpectrumHandler>)
 pub fn get_frozen_spectrum_path(
     id: usize,
     handler: tauri::State<SpectrumHandler>,
-    window: tauri::Window
+    window: tauri::Window,
 ) -> String {
-    handler.get_frozen_spectrum_path(id, get_svg_size(window))
+    handler
+        .get_frozen_spectrum_path(id, get_svg_size(window))
         .unwrap_or(String::new())
 }
 
@@ -163,7 +160,7 @@ pub fn get_frozen_spectrum_path(
 pub async fn get_frozen_spectrum_valleys_points(
     id: usize,
     handler: tauri::State<'_, SpectrumHandler>,
-    window: tauri::Window
+    window: tauri::Window,
 ) -> Result<Vec<(f64, f64)>, ()> {
     let points = handler.get_frozen_spectrum_valleys_points(id, get_svg_size(window));
     Ok(points.unwrap_or(vec![]))
@@ -173,22 +170,24 @@ pub async fn get_frozen_spectrum_valleys_points(
 pub fn save_frozen_spectrum(
     id: usize,
     handler: tauri::State<SpectrumHandler>,
-    window: tauri::Window
+    window: tauri::Window,
 ) {
     let spectrum = handler.clone_frozen(id);
     if let Some(spectrum) = spectrum {
         let log_tx = handler.log_sender.clone();
 
         FileDialogBuilder::new()
-            .add_filter("text", &["txt", ])
+            .add_filter("text", &["txt"])
             .set_file_name("spectrum")
             .set_parent(&window)
             .save_file(move |path| {
                 if let Some(path) = path {
                     return match spectrum.save(&path) {
                         Ok(_) => log_info(&log_tx, format!("[MSF] Espectro {} salvo", id)),
-                        Err(error) => log_error(&log_tx, 
-                            format!("[MSF] falha ao salvar espectro {} ({})", id, error))
+                        Err(error) => log_error(
+                            &log_tx,
+                            format!("[MSF] falha ao salvar espectro {} ({})", id, error),
+                        ),
                     };
                 }
             });
@@ -204,30 +203,22 @@ pub fn get_connection_state(handler: tauri::State<SpectrumHandler>) -> HandlerSt
 
 #[tauri::command]
 pub fn connect_acquisitor(handler: tauri::State<SpectrumHandler>) {
-    match handler.connect() {
-        _ => ()
-    }
+    let _result = handler.connect();
 }
 
 #[tauri::command]
 pub fn disconnect_acquisitor(handler: tauri::State<SpectrumHandler>) {
-    match handler.disconnect() {
-        _ => ()
-    }
+    let _result = handler.disconnect();
 }
 
 #[tauri::command]
 pub fn acquisitor_start_reading(handler: tauri::State<SpectrumHandler>) {
-    match handler.start_reading() {
-        _ => ()
-    }
+    let _result = handler.start_reading();
 }
 
 #[tauri::command]
 pub fn acquisitor_stop_reading(handler: tauri::State<SpectrumHandler>) {
-    match handler.stop_reading() {
-        _ => ()
-    }
+    let _result = handler.stop_reading();
 }
 
 #[tauri::command]
@@ -236,7 +227,6 @@ pub async fn pick_folder(window: tauri::Window) -> Option<PathBuf> {
         .set_parent(&window)
         .pick_folder()
 }
-
 
 // Region: Config --------------------------------------------------------------
 //SubRegion: Handler config ----------------------------------------------------
@@ -248,14 +238,17 @@ pub fn get_handler_config(handler: tauri::State<SpectrumHandler>) -> HandlerConf
 
 #[tauri::command]
 pub fn apply_handler_config(new_config: HandlerConfig, handler: tauri::State<SpectrumHandler>) {
-    if let Err(error) = write_handler_config(&new_config) {                            // write to file
-        handler.log_error(format!("[AAB] Não consegui escrever no arquivo de \
-            config. ({})", error));
+    if let Err(error) = write_handler_config(&new_config) {
+        // write to file
+        handler.log_error(format!(
+            "[AAB] Não consegui escrever no arquivo de \
+            config. ({})",
+            error
+        ));
     };
 
     handler.update_config(new_config);
 }
-
 
 //SubRegion: Acquisitor config -------------------------------------------------
 
@@ -265,10 +258,17 @@ pub fn get_acquisitor_config(handler: tauri::State<SpectrumHandler>) -> Acquisit
 }
 
 #[tauri::command]
-pub fn apply_acquisitor_config(new_config: AcquisitorConfig, handler: tauri::State<SpectrumHandler>) {
-    if let Err(error) = write_acquisitor_config(&new_config) {                            // write to file
-        handler.log_error(format!("[AAB] Não consegui escrever no arquivo de \
-            config. ({})", error));
+pub fn apply_acquisitor_config(
+    new_config: AcquisitorConfig,
+    handler: tauri::State<SpectrumHandler>,
+) {
+    if let Err(error) = write_acquisitor_config(&new_config) {
+        // write to file
+        handler.log_error(format!(
+            "[AAB] Não consegui escrever no arquivo de \
+            config. ({})",
+            error
+        ));
     };
 
     handler.update_acquisitor_config(new_config);
