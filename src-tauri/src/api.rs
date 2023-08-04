@@ -87,12 +87,36 @@ pub fn get_wavelength_limits(handler: tauri::State<SpectrumHandler>) -> (f64, f6
 
 #[tauri::command]
 pub fn get_power_limits(handler: tauri::State<SpectrumHandler>) -> (f64, f64) {
+    let normalize = true; // TODO send to config
+    let offset = if normalize {
+        let max_power = handler.get_max_power();
+        if max_power == f64::NEG_INFINITY {
+            0.0
+        } else {
+            -max_power
+        }
+    } else {
+        0.0
+    };
+
     let limits = handler.get_limits();
 
     if let Some(limits) = limits {
-        (limits.power.1, limits.power.0)
+        (limits.power.1 + offset, limits.power.0 + offset)
     } else {
         (10.5, -10.0)
+    }
+}
+
+// Used for normalization at 0 dB
+#[tauri::command]
+pub fn get_max_power(handler: tauri::State<SpectrumHandler>) -> Option<f64> {
+    let max_power = handler.get_max_power();
+
+    if max_power == f64::NEG_INFINITY {
+        None
+    } else {
+        Some(max_power)
     }
 }
 
@@ -143,6 +167,7 @@ pub fn freeze_spectrum(handler: tauri::State<SpectrumHandler>) {
 #[tauri::command]
 pub fn delete_frozen_spectrum(id: usize, handler: tauri::State<SpectrumHandler>) {
     handler.delete_frozen_spectrum(id);
+    handler.update_limits();
 }
 
 #[tauri::command]

@@ -110,8 +110,8 @@ impl Spectrum {
             values: vec![],
             info,
             limits: Limits {
-                wavelength: (0.0, 0.0),
-                power: (0.0, 0.0),
+                wavelength: (3000.0, -3000.0),
+                power: (100.0, -100.0),
             },
         }
     }

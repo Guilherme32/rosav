@@ -205,6 +205,17 @@ impl SpectrumHandler {
             power: limits_pwr,
         })
     }
+
+    pub fn get_max_power(&self) -> f64 {
+        let active_spectrum = self.last_spectrum.lock().unwrap();
+        let frozen_spectra = self.frozen_spectra.lock().unwrap();
+
+        frozen_spectra
+            .iter()
+            .chain(&*active_spectrum)
+            .map(|spectrum| spectrum.limits.power.1)
+            .fold(f64::NEG_INFINITY, |acc, new| acc.max(new))
+    }
 }
 
 // Region: Frozen stuff ---------------------------------------------------------
@@ -213,7 +224,7 @@ impl SpectrumHandler {
     pub fn freeze_spectrum(&self) {
         let mut frozen_list = self.frozen_spectra.lock().unwrap();
 
-        let spectrum = self.last_spectrum.lock().unwrap();
+        let mut spectrum = self.last_spectrum.lock().unwrap();
 
         match &*spectrum {
             Some(spectrum) => {
@@ -222,6 +233,8 @@ impl SpectrumHandler {
             }
             None => self.log_war("[FFS] Sem espectro para congelar".to_string()),
         }
+
+        *spectrum = None;
     }
 
     pub fn delete_frozen_spectrum(&self, id: usize) {

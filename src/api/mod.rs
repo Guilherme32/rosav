@@ -1,36 +1,35 @@
-#![allow(non_snake_case)]            // Tauri communication requires camelCase
+#![allow(non_snake_case)] // Tauri communication requires camelCase
 
-use wasm_bindgen::prelude::*;
-use serde::{Serialize, Deserialize};
-use serde_wasm_bindgen::{to_value, from_value};
+use serde::{Deserialize, Serialize};
+use serde_wasm_bindgen::{from_value, to_value};
 use std::fmt;
+use wasm_bindgen::prelude::*;
 
 use std::path::PathBuf;
 
 pub mod acquisitors;
 use acquisitors::*;
 
-
 // Region: Returned structs definition
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct Log {
     pub msg: String,
-    pub log_type: LogType
+    pub log_type: LogType,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub enum LogType {
     Info,
     Warning,
-    Error
+    Error,
 }
 impl fmt::Display for LogType {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
             LogType::Info => write!(f, "info"),
             LogType::Warning => write!(f, "warning"),
-            LogType::Error => write!(f, "error")
+            LogType::Error => write!(f, "error"),
         }
     }
 }
@@ -39,7 +38,7 @@ impl fmt::Display for LogType {
 pub enum ConnectionState {
     Disconnected,
     Connected,
-    Reading
+    Reading,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -47,19 +46,17 @@ pub struct HandlerConfig {
     pub auto_save_path: PathBuf,
     pub wavelength_limits: Option<(f64, f64)>,
     pub power_limits: Option<(f64, f64)>,
-    pub acquisitor: acquisitors::AcquisitorSimple
+    pub acquisitor: acquisitors::AcquisitorSimple,
 }
-
 
 pub fn empty_handler_config() -> HandlerConfig {
     HandlerConfig {
         auto_save_path: PathBuf::new(),
         wavelength_limits: None,
         power_limits: None,
-        acquisitor: AcquisitorSimple::FileReader
+        acquisitor: AcquisitorSimple::FileReader,
     }
 }
-
 
 // API -------------------------------
 
@@ -75,7 +72,7 @@ pub async fn hello() {
 
 #[derive(Serialize, Deserialize)]
 struct PrintArgs<'a> {
-    msg: &'a str
+    msg: &'a str,
 }
 
 pub async fn print_backend<'a>(msg: &'a str) {
@@ -118,9 +115,9 @@ pub async fn get_svg_size() -> (i32, i32) {
     obj_rebuilt
 }
 
-pub async fn get_last_logs() -> Vec::<Log> {
+pub async fn get_last_logs() -> Vec<Log> {
     let from_back = invoke("get_last_logs", to_value(&()).unwrap()).await;
-    let obj_rebuilt: Vec::<Log> = from_value(from_back).unwrap();
+    let obj_rebuilt: Vec<Log> = from_value(from_back).unwrap();
 
     obj_rebuilt
 }
@@ -152,15 +149,19 @@ pub async fn freeze_spectrum() {
 
 #[derive(Serialize, Deserialize)]
 struct IdArgs {
-    id: usize
+    id: usize,
 }
 
 pub async fn delete_frozen_spectrum(id: usize) {
-    invoke("delete_frozen_spectrum", to_value(&IdArgs { id } ).unwrap()).await;
+    invoke("delete_frozen_spectrum", to_value(&IdArgs { id }).unwrap()).await;
 }
 
 pub async fn get_frozen_spectrum_path(id: usize) -> String {
-    let from_back = invoke("get_frozen_spectrum_path", to_value(&IdArgs { id }).unwrap()).await;
+    let from_back = invoke(
+        "get_frozen_spectrum_path",
+        to_value(&IdArgs { id }).unwrap(),
+    )
+    .await;
     let obj_rebuilt: String = from_value(from_back).unwrap();
 
     obj_rebuilt
@@ -169,8 +170,9 @@ pub async fn get_frozen_spectrum_path(id: usize) -> String {
 pub async fn get_frozen_spectrum_valleys_points(id: usize) -> Vec<(f64, f64)> {
     let from_back = invoke(
         "get_frozen_spectrum_valleys_points",
-        to_value(&IdArgs { id }).unwrap()
-    ).await;
+        to_value(&IdArgs { id }).unwrap(),
+    )
+    .await;
     let obj_rebuilt: Vec<(f64, f64)> = from_value(from_back).unwrap();
 
     obj_rebuilt
@@ -184,16 +186,20 @@ pub async fn pick_folder() -> Option<PathBuf> {
 }
 
 pub async fn save_frozen_spectrum(id: usize) {
-    invoke("save_frozen_spectrum", to_value(&IdArgs { id } ).unwrap()).await;
+    invoke("save_frozen_spectrum", to_value(&IdArgs { id }).unwrap()).await;
 }
 
 #[derive(Serialize, Deserialize)]
 struct SaveContinuousArgs {
-    save: bool
+    save: bool,
 }
 
 pub async fn save_continuous(save: bool) {
-    invoke("save_continuous", to_value(&SaveContinuousArgs { save } ).unwrap()).await;
+    invoke(
+        "save_continuous",
+        to_value(&SaveContinuousArgs { save }).unwrap(),
+    )
+    .await;
 }
 
 pub async fn get_saving() -> bool {
@@ -242,13 +248,16 @@ pub async fn get_handler_config() -> HandlerConfig {
 
 #[derive(Serialize, Deserialize)]
 struct HandlerConfigArgs {
-    newConfig: HandlerConfig            // The tauri communication requires camelCase
+    newConfig: HandlerConfig, // The tauri communication requires camelCase
 }
 
 pub async fn apply_handler_config(newConfig: HandlerConfig) {
-    invoke("apply_handler_config", to_value(&HandlerConfigArgs { newConfig }).unwrap()).await;
+    invoke(
+        "apply_handler_config",
+        to_value(&HandlerConfigArgs { newConfig }).unwrap(),
+    )
+    .await;
 }
-
 
 // SubRegion: Acquisitor config --------------------------------------------------------------------
 
@@ -261,10 +270,13 @@ pub async fn get_acquisitor_config() -> AcquisitorConfig {
 
 #[derive(Serialize, Deserialize)]
 struct AcquisitorConfigArgs {
-    newConfig: AcquisitorConfig            // The tauri communication requires camelCase
+    newConfig: AcquisitorConfig, // The tauri communication requires camelCase
 }
 
 pub async fn apply_acquisitor_config(newConfig: AcquisitorConfig) {
-    invoke("apply_acquisitor_config", to_value(&AcquisitorConfigArgs { newConfig }).unwrap()).await;
+    invoke(
+        "apply_acquisitor_config",
+        to_value(&AcquisitorConfigArgs { newConfig }).unwrap(),
+    )
+    .await;
 }
-
