@@ -29,9 +29,8 @@ use crate::spectrum_handler::{SpectrumHandler, State};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ImonConfig {
-    pub exposure_ms: f64, // TODO change to ms and use as float. Done, needs to be checked
+    pub exposure_ms: f64,
     pub read_delay_ms: u64,
-    // pub calibration: ImonCalibration,
 }
 
 #[derive(Debug)]
@@ -53,7 +52,7 @@ pub fn new_imon(config: ImonConfig, log_sender: SyncSender<Log>) -> Imon {
 
 pub fn default_config() -> ImonConfig {
     ImonConfig {
-        exposure_ms: 10.0,
+        exposure_ms: 0.01,
         read_delay_ms: 100,
     }
 }

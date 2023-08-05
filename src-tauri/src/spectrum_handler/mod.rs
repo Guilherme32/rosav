@@ -371,7 +371,7 @@ pub fn default_config() -> HandlerConfig {
         wavelength_limits: None,
         power_limits: None,
         acquisitor: AcquisitorSimple::FileReader,
-        valley_detection: ValleyDetection::Simple { prominence: 3.0 },
+        valley_detection: ValleyDetection::Lorentz { prominence: 3.0 },
     }
 }
 
