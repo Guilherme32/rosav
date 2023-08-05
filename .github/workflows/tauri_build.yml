@@ -44,6 +44,6 @@ jobs:
         with:
           tagName: rosav-v__VERSION__
           releaseName: 'Rosav v__VERSION__' # tauri-action replaces \_\_VERSION\_\_ with the app version.
-          releaseBody: 'Binários pre compilados do Rosav, referente à última atualização no GitHub.'
-          releaseDraft: true
+          releaseBody: 'Binários pré compilados do Rosav para windows, referentes à última atualização no GitHub. \nAutomaticamente gerados pelo tauri-action.'
+          releaseDraft: false
           prerelease: false
