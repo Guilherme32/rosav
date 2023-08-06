@@ -149,9 +149,7 @@ pub async fn get_last_spectrum_valleys_points(
     handler: tauri::State<'_, SpectrumHandler>,
     window: tauri::Window,
 ) -> Result<Vec<(f64, f64)>, ()> {
-    println!("Get last points!");
     let points = handler.get_last_spectrum_valleys_points(get_svg_size(window));
-    println!("Just got the last points!");
     Ok(points.unwrap_or(vec![]))
 }
 
