@@ -384,7 +384,7 @@ fn parse_imon_parameters(
     if let Some(n_pixels) = n_pixels {
         sleep(Duration::from_millis(10));
 
-        let dark_pixels = get_raw_pixel_readings(&mut port, config, n_pixels)?;
+        let dark_pixels = get_raw_pixel_readings_multisampled(&mut port, config, n_pixels, 10, 32)?;
         if dark_pixels.len() != n_pixels as usize {
             return Err(Box::new(ImonError::ParseError));
         }
@@ -490,6 +490,8 @@ fn constant_read(
             match get_spectrum(
                 &mut port,
                 &config,
+                10,
+                16,
                 args.n_pixels,
                 &args.coefficients,
                 &args.dark_pixels,
@@ -531,7 +533,7 @@ fn constant_read(
     }
 }
 
-pub fn get_raw_pixel_readings(
+pub fn fetch_raw_pixel_readings(
     port: &mut Box<dyn SerialPort>,
     config: &ImonConfig,
     n_pixels: u32,
@@ -587,14 +589,55 @@ pub fn get_raw_pixel_readings(
     Ok(pixel_readings)
 }
 
+pub fn get_raw_pixel_readings_robust(
+    port: &mut Box<dyn SerialPort>,
+    config: &ImonConfig,
+    n_pixels: u32,
+    retries: u32,
+) -> Result<Vec<u32>, Box<dyn Error>> {
+    for _ in 0..(retries - 1) {
+        if let Ok(spectrum) = fetch_raw_pixel_readings(port, config, n_pixels) {
+            return Ok(spectrum);
+        }
+    }
+
+    fetch_raw_pixel_readings(port, config, n_pixels)
+}
+
+pub fn get_raw_pixel_readings_multisampled(
+    port: &mut Box<dyn SerialPort>,
+    config: &ImonConfig,
+    n_pixels: u32,
+    retries: u32,
+    multisampling: u32,
+) -> Result<Vec<u32>, Box<dyn Error>> {
+    let mut readings_sum: Vec<u64> = vec![0; n_pixels as usize];
+
+    for _ in 0..multisampling {
+        let pixel_readings = get_raw_pixel_readings_robust(port, config, n_pixels, retries)?;
+
+        for (i, &reading) in pixel_readings.iter().enumerate() {
+            readings_sum[i] += reading as u64;
+        }
+    }
+
+    Ok(readings_sum
+        .iter()
+        .map(|x| (x / (multisampling as u64)) as u32)
+        .collect())
+}
+
 fn get_spectrum(
     port: &mut Box<dyn SerialPort>,
     config: &ImonConfig,
+    retries: u32,
+    multisampling: u32,
     n_pixels: u32,
     coefficients: &ImonCoefficients,
     dark_pixels: &[u32],
 ) -> Result<Spectrum, Box<dyn Error>> {
-    let pixel_readings = get_raw_pixel_readings(port, config, n_pixels)?;
+    let pixel_readings =
+        get_raw_pixel_readings_multisampled(port, config, n_pixels, retries, multisampling)?;
 
     let temperature = get_temperature(port).unwrap_or(25.314);
 
