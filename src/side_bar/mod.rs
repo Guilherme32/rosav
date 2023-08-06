@@ -47,13 +47,13 @@ struct RenderTraceProps<'a> {
     saving: &'a Signal<bool>,
 }
 
-async fn freeze_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
+async fn freeze_callback(id: u8, traces_list: &Signal<Vec<Trace>>) {
     let mut traces_list = traces_list.modify();
 
     let trace = &mut traces_list[id as usize];
-    if trace.svg_path.len() == 0 {
+    if trace.svg_path.is_empty() {
         // Nao pode congelar onde não tem espectro
-        return ();
+        return;
     }
 
     trace.freeze_time = Some(get_time().await);
@@ -67,7 +67,7 @@ async fn freeze_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
     freeze_spectrum().await;
 }
 
-async fn delete_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
+async fn delete_callback(id: u8, traces_list: &Signal<Vec<Trace>>) {
     traces_list.modify().remove(id as usize);
 
     for (i, trace) in traces_list.modify().iter_mut().enumerate() {
@@ -77,21 +77,21 @@ async fn delete_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
     delete_frozen_spectrum(id as usize).await;
 }
 
-async fn visibility_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
+async fn visibility_callback(id: u8, traces_list: &Signal<Vec<Trace>>) {
     let trace = &mut traces_list.modify()[id as usize];
     trace.visible = !trace.visible;
 }
 
-async fn save_frozen_callback<'a>(id: u8, _traces_list: &'a Signal<Vec<Trace>>) {
+async fn save_frozen_callback(id: u8, _traces_list: &Signal<Vec<Trace>>) {
     save_frozen_spectrum(id as usize).await;
 }
 
-async fn save_continuous_callback<'a>(saving: &'a Signal<bool>) {
+async fn save_continuous_callback(saving: &Signal<bool>) {
     save_continuous(!*saving.get()).await;
     saving.set(get_saving().await);
 }
 
-async fn draw_valleys_callback<'a>(id: u8, traces_list: &'a Signal<Vec<Trace>>) {
+async fn draw_valleys_callback(id: u8, traces_list: &Signal<Vec<Trace>>) {
     let trace = &mut traces_list.modify()[id as usize];
     trace.draw_valleys = !trace.draw_valleys;
 }
@@ -190,11 +190,11 @@ fn SideBarMain<'a, G: Html>(cx: Scope<'a>, props: SideBarMainProps<'a>) -> View<
                     view = move |cx, trace| view! {
                         cx, RenderTrace(
                             trace=trace,
-                            traces_list=&props.traces,
-                            saving=&props.saving
+                            traces_list=props.traces,
+                            saving=props.saving
                         )
                     },
-                    key = |trace| trace_info_identifier(trace)
+                    key = trace_info_identifier
                 )
             }
         }
@@ -207,7 +207,7 @@ fn trace_info_identifier(trace: &Trace) -> u64 {
     let draw_valleys: u64 = (trace.draw_valleys as u64) * 4;
     let id: u64 = (trace.id as u64) * 8;
 
-    return active + visible + draw_valleys + id;
+    active + visible + draw_valleys + id
 }
 
 #[component]
@@ -326,13 +326,13 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
         spawn_local_scoped(cx, async move {
             match pick_folder().await {
                 None => (),
-                Some(path) => (*props.config.modify()).auto_save_path = path,
+                Some(path) => (props.config.modify()).auto_save_path = path,
             }
         });
     };
 
     let save_path = create_memo(cx, || {
-        format!("{}", (*props.config.get()).auto_save_path.display())
+        ((props.config.get()).auto_save_path.display()).to_string()
     });
 
     let update_limits = move |_| {
@@ -341,8 +341,8 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
     };
 
     let acquisitor_select = move |_| match (*acquisitor.get()).as_str() {
-        "file_reader" => (*props.config.modify()).acquisitor = AcquisitorSimple::FileReader,
-        "imon" => (*props.config.modify()).acquisitor = AcquisitorSimple::Imon,
+        "file_reader" => (props.config.modify()).acquisitor = AcquisitorSimple::FileReader,
+        "imon" => (props.config.modify()).acquisitor = AcquisitorSimple::Imon,
         _ => (),
     };
 
@@ -350,20 +350,19 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
         let prominence_result = prominence.get().parse::<f64>();
         match prominence_result {
             Ok(prominence) => match (*valley_detection.get()).as_str() {
-                "none" => (*props.config.modify()).valley_detection = ValleyDetection::None,
+                "none" => (props.config.modify()).valley_detection = ValleyDetection::None,
                 "simple" => {
-                    (*props.config.modify()).valley_detection =
+                    (props.config.modify()).valley_detection =
                         ValleyDetection::Simple { prominence }
                 }
                 "lorentz" => {
-                    (*props.config.modify()).valley_detection =
+                    (props.config.modify()).valley_detection =
                         ValleyDetection::Lorentz { prominence }
                 }
                 _ => (),
             },
             Err(_) => {
                 prominence.set("3".to_string());
-                return;
             }
         }
     };
@@ -471,19 +470,17 @@ fn update_wavelength_limits(
     wl_max: &ReadSignal<String>,
     config: &Signal<HandlerConfig>,
 ) {
-    let new_limits: Option<(f64, f64)>;
-
-    if wl_min.get().len() == 0 || wl_max.get().len() == 0 {
-        new_limits = None;
+    let new_limits: Option<(f64, f64)> = if wl_min.get().len() == 0 || wl_max.get().len() == 0 {
+        None
     } else {
         let min_float = wl_min.get().parse::<f64>();
         let max_float = wl_max.get().parse::<f64>();
 
-        new_limits = match (min_float, max_float) {
+        match (min_float, max_float) {
             (Ok(min), Ok(max)) => Some((min * 1e-9, max * 1e-9)),
             (_, _) => None,
-        };
-    }
+        }
+    };
 
     if new_limits != config.get().wavelength_limits {
         config.modify().wavelength_limits = new_limits;
@@ -495,19 +492,17 @@ fn update_power_limits(
     pwr_max: &ReadSignal<String>,
     config: &Signal<HandlerConfig>,
 ) {
-    let new_limits: Option<(f64, f64)>;
-
-    if pwr_min.get().len() == 0 || pwr_max.get().len() == 0 {
-        new_limits = None;
+    let new_limits: Option<(f64, f64)> = if pwr_min.get().len() == 0 || pwr_max.get().len() == 0 {
+        None
     } else {
         let min_float = pwr_min.get().parse::<f64>();
         let max_float = pwr_max.get().parse::<f64>();
 
-        new_limits = match (min_float, max_float) {
+        match (min_float, max_float) {
             (Ok(min), Ok(max)) => Some((min, max)),
             (_, _) => None,
-        };
-    }
+        }
+    };
 
     if new_limits != config.get().power_limits {
         config.modify().power_limits = new_limits;
@@ -516,8 +511,8 @@ fn update_power_limits(
 
 fn check_number_input(input: &Signal<String>) {
     let mut temp_copy = (*input.get()).clone();
-    temp_copy.push_str("1");
-    if let Err(_) = temp_copy.parse::<f64>() {
+    temp_copy.push('1');
+    if temp_copy.parse::<f64>().is_err() {
         input.set(String::new());
     }
 }

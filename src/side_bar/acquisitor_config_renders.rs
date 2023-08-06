@@ -2,8 +2,8 @@ use sycamore::futures::spawn_local_scoped;
 use sycamore::{prelude::*, rt};
 
 use crate::api::*;
-use acquisitors::*;
 use crate::side_bar::check_number_input;
+use acquisitors::*;
 
 #[component]
 pub fn RenderFileReaderConfig<G: Html>(cx: Scope) -> View<G> {
@@ -22,12 +22,12 @@ pub fn RenderFileReaderConfig<G: Html>(cx: Scope) -> View<G> {
         spawn_local_scoped(cx, async move {
             match pick_folder().await {
                 None => (),
-                Some(path) => (*config.modify()).watcher_path = path,
+                Some(path) => (config.modify()).watcher_path = path,
             }
         });
     };
 
-    let watcher_path = create_memo(cx, || format!("{}", (*config.get()).watcher_path.display()));
+    let watcher_path = create_memo(cx, || format!("{}", (config.get()).watcher_path.display()));
 
     create_effect(cx, move || {
         // Apply config when it is updated
@@ -101,7 +101,7 @@ pub fn RenderImonConfig<G: Html>(cx: Scope) -> View<G> {
         let mut config = config.modify();
 
         match (*exposure.get()).parse::<f64>() {
-            Ok(value) if 0.001 <= value && value <= 60_000.0 => config.exposure_ms = value,
+            Ok(value) if (0.001..=60_000.0).contains(&value) => config.exposure_ms = value,
 
             _ => exposure.set(config.exposure_ms.to_string()),
         }

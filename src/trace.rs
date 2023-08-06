@@ -24,7 +24,6 @@ pub struct Trace {
     pub draw_valleys: bool, // TODO adicionar detecção de vale
     pub active: bool,
     pub valleys: Vec<(f64, f64)>,
-    // pub svg_size: (i32, i32),
     pub svg_path: String,
     pub freeze_time: Option<String>, // Se None não está congelado
     pub drawn_info: TraceInfo,       // Stuff to check if it needs to be redrawn
@@ -43,15 +42,16 @@ pub fn new_trace(id: u8, visible: bool, draw_valleys: bool) -> Trace {
     }
 }
 
+static LETTERS: &[&str] = &[
+    "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S",
+    "T", "U", "V", "W", "X", "Y", "Z",
+];
+
 pub fn trace_id_to_name(id: u8) -> String {
-    if id > 25 {
+    if (id as usize) >= LETTERS.len() {
         format!("{}", id)
     } else {
-        let letters = vec![
-            "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q",
-            "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
-        ];
-        format!("{}", letters[id as usize])
+        LETTERS[id as usize].to_string()
     }
 }
 
@@ -66,7 +66,7 @@ pub fn trace_id_to_color(id: u8) -> String {
             "#7aa89f", "#d27e99", "#76946a", "#717c7c", // sOrange
             "#ffa066",
         ];
-        format!("{}", colors[id as usize])
+        colors[id as usize].to_string()
     }
 }
 

@@ -85,7 +85,7 @@ struct PrintArgs<'a> {
     msg: &'a str,
 }
 
-pub async fn print_backend<'a>(msg: &'a str) {
+pub async fn print_backend(msg: &str) {
     invoke("print_backend", to_value(&PrintArgs { msg }).unwrap()).await;
 }
 

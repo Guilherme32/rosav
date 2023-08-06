@@ -74,11 +74,11 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
                 let new_path = get_last_spectrum_path().await;
                 let new_valleys = get_last_spectrum_valleys_points().await;
 
-                traces.modify().last_mut().map(|trace| {
+                if let Some(trace) = traces.modify().last_mut() {
                     trace.drawn_info = current_info.clone();
                     trace.svg_path = new_path;
                     trace.valleys = new_valleys;
-                });
+                };
                 // continue; // Skip the loop to end the modify() and avoid problems
                 // TODO remove. Test if the change does not make weird modify problems
             }
@@ -94,7 +94,7 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
             let new_svg_size = get_svg_size().await;
             for (id, trace) in traces.modify().iter_mut().enumerate() {
                 // Update when the window changes
-                if trace.svg_path.len() == 0 {
+                if trace.svg_path.is_empty() {
                     // No old spectrum, no update
                     continue;
                 }
@@ -150,7 +150,7 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
     }
 }
 
-async fn update_state<'a>(connection_state: &'a Signal<ConnectionState>) {
+async fn update_state(connection_state: &Signal<ConnectionState>) {
     if let Some(new_state) = get_connection_state().await {
         if new_state != *connection_state.get() {
             connection_state.set(new_state);
