@@ -47,7 +47,6 @@ pub enum ValleyDetection {
     None,
     Simple { prominence: f64 },
     Lorentz { prominence: f64 },
-    Gauss { prominence: f64 },
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]

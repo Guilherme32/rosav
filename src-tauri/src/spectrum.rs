@@ -4,11 +4,17 @@ use chrono::prelude::*;
 use csv;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+use std::f64::consts::PI;
 use std::fmt;
 use std::path::Path;
 
 use find_peaks::PeakFinder;
 use itertools::Itertools;
+
+use nalgebra::DVector;
+use std::ops::Range;
+use varpro::prelude::*;
+use varpro::solvers::levmar::{LevMarProblemBuilder, LevMarSolver};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SpectrumValue {
@@ -44,7 +50,6 @@ pub enum ValleyDetection {
     None,
     Simple { prominence: f64 },
     Lorentz { prominence: f64 },
-    Gauss { prominence: f64 },
 }
 
 impl Info {
@@ -257,7 +262,6 @@ impl Spectrum {
             ValleyDetection::None => None,
             ValleyDetection::Simple { prominence } => Some(self.get_valleys_simple(prominence)),
             ValleyDetection::Lorentz { prominence } => Some(self.get_valleys_lorentz(prominence)),
-            ValleyDetection::Gauss { prominence } => Some(self.get_valleys_gauss(prominence)),
         }
     }
 
@@ -284,17 +288,53 @@ impl Spectrum {
         (self.info.valleys.as_ref()).unwrap()
     }
 
+    pub fn get_valley_range(&self, peak: &find_peaks::Peak<f64>) -> Range<usize> {
+        let mut left = peak.middle_position();
+        let mut right = left;
+
+        let valley_pwr = self.values[peak.middle_position()].power;
+        let prominence = peak.prominence.unwrap_or(3.0);
+
+        for i in (0..left).rev() {
+            if self.values[i].power >= valley_pwr + prominence / 2.0 {
+                left = i;
+                break;
+            }
+        }
+        for i in right..self.values.len() {
+            if self.values[i].power >= valley_pwr + prominence / 2.0 {
+                right = i;
+                break;
+            }
+        }
+
+        left..right
+    }
+
     pub fn get_valleys_lorentz(&mut self, prominence: f64) -> &Vec<SpectrumValue> {
-        println!("Lorentz approximation not yet implemented!!!");
-        self.get_valleys_simple(prominence)
+        let powers: Vec<f64> = self
+            .values
+            .iter()
+            .map(|spectrum_value| -spectrum_value.power)
+            .collect();
+
+        let mut peak_finder = PeakFinder::new(&powers);
+        peak_finder.with_min_prominence(prominence);
+
+        let valleys: Option<Vec<SpectrumValue>> = peak_finder
+            .find_peaks()
+            .iter()
+            .map(|peak| self.get_valley_range(peak))
+            .map(|peak| approximate_lorentz(&self.values[peak]))
+            .collect();
+
+        self.info.valleys = valleys;
+        self.info.valley_detection = ValleyDetection::Lorentz { prominence };
+
+        // Can unwrap, just put it in a Some
+        (self.info.valleys.as_ref()).unwrap()
     }
 
-    pub fn get_valleys_gauss(&mut self, prominence: f64) -> &Vec<SpectrumValue> {
-        println!("Gauss approximation not yet implemented!!!");
-        self.get_valleys_simple(prominence)
-    }
-
-    // TODO implement different methods: None, Simple, Lorentz, Gauss
     pub fn get_valleys_points(
         &mut self,
         svg_limits: (u32, u32),
@@ -318,4 +358,73 @@ impl Spectrum {
             })
             .unwrap_or(vec![])
     }
+}
+
+pub fn lorentz(x: &DVector<f64>, x_0: f64, gamma: f64) -> DVector<f64> {
+    x.map(|x| (1.0 / (PI * gamma * (1.0 + ((x - x_0) / gamma).powf(2.0)))))
+}
+
+pub fn derivative_lorentz_x_0(x: &DVector<f64>, x_0: f64, gamma: f64) -> DVector<f64> {
+    x.map(|x| {
+        (2.0 / (PI * gamma.powf(3.0))) * (x - x_0) / (1.0 + ((x - x_0) / gamma).powf(2.0)).powf(2.0)
+    })
+}
+
+pub fn derivative_lorentz_gamma(x: &DVector<f64>, x_0: f64, gamma: f64) -> DVector<f64> {
+    x.map(|x| {
+        let a = ((x - x_0) / gamma).powf(2.0);
+        (-1.0 / (PI * gamma.powf(2.0))) * ((1.0 - a) / (1.0 + a).powf(2.0))
+    })
+}
+
+pub fn approximate_lorentz(values: &[SpectrumValue]) -> Option<SpectrumValue> {
+    let x: Vec<f64> = values.iter().map(|value| value.wavelength).collect();
+    let x = DVector::from(x);
+    let y: Vec<f64> = values.iter().map(|value| value.power).collect();
+    let y = DVector::from(y);
+
+    let guess_x_0 = (x[x.len() - 1] + x[0]) / 2.0; // Rough center
+    let guess_gamma = (x[x.len() - 1] - x[0]) / 2.0; // Rough 1/2 FWHM (FWHM = 2 gamma)
+
+    let initial_guess = vec![guess_x_0, guess_gamma];
+
+    // NOTE these unwraps for the builders should work, but keep an eye on them
+    let model = SeparableModelBuilder::<f64>::new(&["x_0", "gamma"])
+        .function(&["x_0", "gamma"], lorentz)
+        .partial_deriv("x_0", derivative_lorentz_x_0)
+        .partial_deriv("gamma", derivative_lorentz_gamma)
+        .invariant_function(|x| DVector::from_element(x.len(), 1.))
+        .independent_variable(x)
+        .initial_parameters(initial_guess)
+        .build()
+        .unwrap();
+
+    let problem = LevMarProblemBuilder::new(model)
+        .observations(y)
+        .build()
+        .unwrap();
+
+    let (solved_problem, report) = LevMarSolver::new().with_xtol(1e-12).minimize(problem);
+
+    if !report.termination.was_successful() {
+        println!(
+            "Lorentz approximation termination unsuccessfull: {:?}",
+            report
+        );
+        return None;
+    }
+
+    let optimized_params = solved_problem.params();
+    let coeffs = solved_problem.linear_coefficients().unwrap();
+
+    let wavelength = vec![optimized_params[0]];
+    let wavelength = DVector::from(wavelength);
+
+    let power =
+        lorentz(&wavelength, optimized_params[0], optimized_params[1])[0] * coeffs[0] + coeffs[1];
+
+    Some(SpectrumValue {
+        wavelength: wavelength[0],
+        power,
+    })
 }

@@ -310,10 +310,6 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
                 valley_detection.set("lorentz".to_string());
                 prominence
             }
-            ValleyDetection::Gauss { prominence } => {
-                valley_detection.set("gauss".to_string());
-                prominence
-            }
         };
 
         prominence.set(_prominence.to_string());
@@ -362,10 +358,6 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
                 "lorentz" => {
                     (*props.config.modify()).valley_detection =
                         ValleyDetection::Lorentz { prominence }
-                }
-                "gauss" => {
-                    (*props.config.modify()).valley_detection =
-                        ValleyDetection::Gauss { prominence }
                 }
                 _ => (),
             },
@@ -444,7 +436,6 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
                     option(value="none") { "Nenhuma" }
                     option(value="simple") { "Simples" }
                     option(value="lorentz") { "Lorentziana" }
-                    option(value="gauss") { "Gaussiana" }
                 }
             }
 
