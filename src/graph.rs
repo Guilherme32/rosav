@@ -38,46 +38,14 @@ pub fn Graph<'a, G: Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
 }
 
 fn draw_trace<G: Html>(cx: Scope, trace: Trace) -> View<G> {
-    let trace_line = if trace.visible {
-        view! { cx,
-            path(
-                d=trace.svg_path,
-                fill="none",
-                stroke-width="2",
-                stroke=trace_id_to_color(trace.id),
-                clip-path="url(#graph-clip)"
-            ) {}
-        }
-    } else {
-        view! { cx, "" }
-    };
+    let valleys_markers = trace.render_valleys_markers(cx);
+    let valleys_mean_marker = trace.render_valleys_mean_marker(cx);
+    let trace_line = trace.render_spectrum(cx);
 
     view! { cx,
-        (trace_line)        // Had to separate because of ownership issues
-
-        (if trace.draw_valleys {
-            View::new_fragment(trace.valleys.iter()
-                .map(|&valley| view! { cx,
-                    circle(
-                        cx=valley.0,
-                        cy=valley.1,
-                        r="6",
-                        stroke-width="2",
-                        stroke="#16161D",
-                        fill=trace_id_to_color(trace.id),
-                        clip-path="url(#graph-clip)"
-                    ) {}
-                    line(
-                        x1=valley.0,
-                        x2=valley.0,
-                        y1=(valley.1 + 3.0),
-                        y2=(valley.1 - 3.0),
-                        stroke-width="2",
-                        stroke="#16161D",
-                        clip-path="url(#graph-clip)"
-                    ) {}
-                }).collect())
-        } else { view!{ cx, "" } })
+        (trace_line)
+        (valleys_markers)
+        (valleys_mean_marker)
     }
 }
 

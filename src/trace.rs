@@ -1,3 +1,5 @@
+use sycamore::prelude::*;
+
 use crate::api::ValleyDetection;
 
 #[derive(Clone, PartialEq, Debug)]
@@ -21,7 +23,9 @@ fn empty_trace_info() -> TraceInfo {
 pub struct Trace {
     pub id: u8,
     pub visible: bool,
-    pub draw_valleys: bool, // TODO adicionar detecção de vale
+    pub draw_valleys: bool,
+    pub draw_valleys_mean: bool,
+    pub color_id: Option<u8>,
     pub active: bool,
     pub valleys: Vec<(f64, f64)>,
     pub svg_path: String,
@@ -29,11 +33,13 @@ pub struct Trace {
     pub drawn_info: TraceInfo,       // Stuff to check if it needs to be redrawn
 }
 
-pub fn new_trace(id: u8, visible: bool, draw_valleys: bool) -> Trace {
+pub fn new_trace(id: u8, visible: bool, draw_valleys: bool, draw_valleys_mean: bool) -> Trace {
     Trace {
         id,
         visible,
         draw_valleys,
+        draw_valleys_mean,
+        color_id: None,
         active: true,
         valleys: vec![],
         svg_path: String::new(),
@@ -55,21 +61,149 @@ pub fn trace_id_to_name(id: u8) -> String {
     }
 }
 
-pub fn trace_id_to_color(id: u8) -> String {
-    if id > 8 {
-        trace_id_to_color(id - 9)
-    } else {
-        // rYellow   cBlue      sRed       oViolet
-        let colors = vec![
-            "#ff9e3b", "#7e9cd8", "#e82424", "#957fb8",
-            // wAqua      sPink      aGreen     kGray
-            "#7aa89f", "#d27e99", "#76946a", "#717c7c", // sOrange
-            "#ffa066",
-        ];
-        colors[id as usize].to_string()
+static COLORS: &[&str] = &[
+    // rYellow   cBlue      sRed       oViolet
+    "#ff9e3b", "#7e9cd8", "#e82424", "#957fb8",
+    // wAqua      sPink      aGreen     kGray   sOrange
+    "#7aa89f", "#d27e99", "#76946a", "#717c7c", "#ffa066",
+];
+
+fn trace_id_to_color(id: u8) -> String {
+    let id = (id as usize) % COLORS.len();
+    COLORS[id].to_string()
+}
+
+impl Trace {
+    pub fn get_color(&self) -> String {
+        if let Some(color_id) = self.color_id {
+            trace_id_to_color(color_id)
+        } else {
+            trace_id_to_color(self.id)
+        }
+    }
+
+    pub fn style(&self) -> String {
+        format!("background-color: {};", self.get_color())
+    }
+
+    pub fn change_color(&mut self) {
+        if let Some(color_id) = self.color_id {
+            self.color_id = Some((color_id + 1) % (COLORS.len() as u8));
+        } else {
+            self.color_id = Some((self.id + 1) % (COLORS.len() as u8));
+        }
+    }
+
+    pub fn valleys_mean(&self) -> Option<(f64, f64)> {
+        if self.valleys.len() < 2 {
+            return None;
+        }
+
+        let sum = self
+            .valleys
+            .iter()
+            .fold((0.0, 0.0), |acc, new| (acc.0 + new.0, acc.1 + new.1));
+
+        let len = self.valleys.len();
+        Some((sum.0 / (len as f64), sum.1 / (len as f64)))
     }
 }
 
-pub fn trace_id_to_style(id: u8) -> String {
-    format!("background-color: {};", trace_id_to_color(id))
+// Drawing implementations
+impl Trace {
+    pub fn render_spectrum<G: Html>(self, cx: Scope) -> View<G> {
+        let color = self.get_color();
+
+        if self.visible {
+            view! { cx,
+                path(
+                    d=self.svg_path,
+                    fill="none",
+                    stroke-width="2",
+                    stroke=color,
+                    clip-path="url(#graph-clip)"
+                ) {}
+            }
+        } else {
+            view! { cx, "" }
+        }
+    }
+
+    pub fn render_valleys_markers<G: Html>(&self, cx: Scope) -> View<G> {
+        let color = self.get_color();
+
+        if self.draw_valleys {
+            View::new_fragment(
+                self.valleys
+                    .iter()
+                    .map(|&valley| {
+                        let color = color.clone();
+                        view! { cx,
+                            circle(
+                                cx=valley.0,
+                                cy=valley.1,
+                                r="6",
+                                stroke-width="2",
+                                stroke="#16161D",
+                                fill=color,
+                                clip-path="url(#graph-clip)"
+                            ) {}
+                            line(
+                                x1=valley.0,
+                                x2=valley.0,
+                                y1=(valley.1 + 3.0),
+                                y2=(valley.1 - 3.0),
+                                stroke-width="2",
+                                stroke="#16161D",
+                                clip-path="url(#graph-clip)"
+                            ) {}
+                        }
+                    })
+                    .collect(),
+            )
+        } else {
+            view! { cx, "" }
+        }
+    }
+
+    pub fn render_valleys_mean_marker<G: Html>(&self, cx: Scope) -> View<G> {
+        let color = self.get_color();
+        if self.draw_valleys_mean {
+            if let Some(valleys_mean) = self.valleys_mean() {
+                view! { cx,
+                    circle(
+                        cx=valleys_mean.0,
+                        cy=valleys_mean.1,
+                        r="6",
+                        stroke-width="2",
+                        stroke="#16161D",
+                        fill=color,
+                        clip-path="url(#graph-clip)"
+                    ) {}
+                    line(
+                        x1=valleys_mean.0,
+                        x2=valleys_mean.0,
+                        y1=(valleys_mean.1 + 3.0),
+                        y2=(valleys_mean.1 - 3.0),
+                        stroke-width="2",
+                        stroke="#16161D",
+                        clip-path="url(#graph-clip)"
+                    ) {}
+                    line(
+                        x1=(valleys_mean.0 + 3.0),
+                        x2=(valleys_mean.0 - 3.0),
+                        y1=valleys_mean.1,
+                        y2=valleys_mean.1,
+                        stroke-width="2",
+                        stroke="#16161D",
+                        clip-path="url(#graph-clip)"
+                    ) {}
+                }
+            } else {
+                view! { cx, "" }
+            }
+        } else {
+            view! { cx, "" }
+        }
+    }
 }

@@ -61,8 +61,9 @@ async fn freeze_callback(id: u8, traces_list: &Signal<Vec<Trace>>) {
 
     let visible = trace.visible;
     let draw_valleys = trace.draw_valleys;
+    let draw_valleys_mean = trace.draw_valleys_mean;
 
-    traces_list.push(new_trace(id + 1, visible, draw_valleys));
+    traces_list.push(new_trace(id + 1, visible, draw_valleys, draw_valleys_mean));
 
     freeze_spectrum().await;
 }
@@ -94,6 +95,16 @@ async fn save_continuous_callback(saving: &Signal<bool>) {
 async fn draw_valleys_callback(id: u8, traces_list: &Signal<Vec<Trace>>) {
     let trace = &mut traces_list.modify()[id as usize];
     trace.draw_valleys = !trace.draw_valleys;
+}
+
+async fn draw_valleys_mean_callback(id: u8, traces_list: &Signal<Vec<Trace>>) {
+    let trace = &mut traces_list.modify()[id as usize];
+    trace.draw_valleys_mean = !trace.draw_valleys_mean;
+}
+
+async fn change_color_callback(id: u8, traces_list: &Signal<Vec<Trace>>) {
+    let trace = &mut traces_list.modify()[id as usize];
+    trace.change_color();
 }
 
 #[component]
@@ -128,10 +139,21 @@ fn RenderTrace<'a, G: Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<
             draw_valleys_callback(props.trace.id, props.traces_list).await;
         })
     };
+    let click_draw_valleys_mean = move |_| {
+        spawn_local_scoped(cx, async move {
+            draw_valleys_mean_callback(props.trace.id, props.traces_list).await;
+        })
+    };
+    let click_change_color = move |_| {
+        spawn_local_scoped(cx, async move {
+            change_color_callback(props.trace.id, props.traces_list).await;
+        })
+    };
 
+    let name_style = props.trace.style();
     view! { cx,
         div(class="trace") {
-            span(class="name", style=trace_id_to_style(props.trace.id)) {
+            span(class="name", style=name_style) {
                 (trace_id_to_name(props.trace.id))
             }
             span(class="status") {
@@ -147,9 +169,15 @@ fn RenderTrace<'a, G: Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<
                 })
 
                 (if props.trace.visible {
-                    view! { cx, button(on:click=click_visibility, title="Esconder traço") { " " } }
+                    view! { cx, button(on:click=click_visibility, title="Esconder traço") { "󰈉 " } }
                 } else {
-                    view! { cx, button(on:click=click_visibility, title="Revelar traço") { " " } }
+                    view! { cx, button(on:click=click_visibility, title="Revelar traço") { "󰈈 " } }
+                })
+
+                (if props.trace.draw_valleys {
+                    view! { cx, button(on:click=click_draw_valleys, title="Esconder vales") { "󰽅 " } }
+                } else {
+                    view! { cx, button(on:click=click_draw_valleys, title="Revelar vales") { "󰆤 " } }
                 })
 
                 (if props.trace.active {
@@ -162,10 +190,12 @@ fn RenderTrace<'a, G: Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<
                     view! { cx, button(on:click=click_save_frozen, title="Salvar traço") { " " } }
                 })
 
-                (if props.trace.draw_valleys {
-                    view! { cx, button(on:click=click_draw_valleys, title="Esconder vales") { "󰽅 " } }
+                button(on:click=click_change_color, title="Mudar cor do traço") { "󰈊 " }
+
+                (if props.trace.draw_valleys_mean {
+                    view! { cx, button(on:click=click_draw_valleys_mean, title="Esconder médias") { "󰍑 " } }
                 } else {
-                    view! { cx, button(on:click=click_draw_valleys, title="Revelar vales") { "󰆤 " } }
+                    view! { cx, button(on:click=click_draw_valleys_mean, title="Revelar médias") { "󰍐 " } }
                 })
             }
         }
@@ -203,11 +233,13 @@ fn SideBarMain<'a, G: Html>(cx: Scope<'a>, props: SideBarMainProps<'a>) -> View<
 
 fn trace_info_identifier(trace: &Trace) -> u64 {
     let active: u64 = trace.active as u64;
-    let visible: u64 = (trace.visible as u64) * 2;
-    let draw_valleys: u64 = (trace.draw_valleys as u64) * 4;
-    let id: u64 = (trace.id as u64) * 8;
+    let visible: u64 = (trace.visible as u64) * (1 << 1);
+    let draw_valleys: u64 = (trace.draw_valleys as u64) * (1 << 2);
+    let draw_valleys_mean: u64 = (trace.draw_valleys_mean as u64) * (1 << 3);
+    let id: u64 = (trace.id as u64) * (1 << 4);
+    let color_id: u64 = (trace.color_id.unwrap_or(255) as u64) * (1 << 12);
 
-    active + visible + draw_valleys + id
+    active + visible + draw_valleys + draw_valleys_mean + id + color_id
 }
 
 #[component]
