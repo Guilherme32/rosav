@@ -350,7 +350,7 @@ button:active {
 }
 
 .config input:hover {
-  box-shadow: 0px 0px 1px 1px $hard_back;
+  box-shadow: 0px 0px 1px 0px $hard_back;
 }
 
 .config input:focus {
@@ -373,7 +373,7 @@ select {
   cursor: inherit;
   line-height: inherit;
   outline: none;
-  display: grid;
+  border-radius: 0px;
 }
 
 .config select {
@@ -387,7 +387,7 @@ select {
 }
 
 .config select:hover {
-  box-shadow: 0px 0px 1px 1px $hard_back;
+  box-shadow: 0px 0px 1px 0px $hard_back;
 }
 
 .config select:focus {
