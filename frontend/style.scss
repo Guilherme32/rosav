@@ -58,6 +58,14 @@ $error_back: $winterRed;
   valley marker: boat yellow 1
 */
 
+/* NOTE if the styles look inconsistent, look here
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+*/
+
 @font-face {
   font-family: "Caskaydia Cove";
   src: url("fonts/CaskaydiaCoveNerdFont-Regular.ttf");
@@ -338,25 +346,52 @@ button:active {
   width: 4rem;
   border: 2px solid $main_back;
   margin-right: 5px;
+  font-size: 0.85rem;
+}
+
+.config input:hover {
+  box-shadow: 0px 0px 1px 1px $hard_back;
 }
 
 .config input:focus {
+  border-color: $hard_back;
   outline: none;
+  box-shadow: none;
+}
+
+select {
+  // A reset of styles, including removing the default dropdown arrow
+  appearance: none;
+  // Additional resets for further consistency
+  background-color: transparent;
+  border: none;
+  padding: 2px;
+  margin: 0;
+  width: 100%;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: inherit;
+  line-height: inherit;
+  outline: none;
+  display: grid;
 }
 
 .config select {
   background-color: $border;
-  width: 11rem;
   border: 2px solid $main_back;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
 }
 
 .config .select-selected {
-  background-color: $border;
   color: $text;
 }
 
+.config select:hover {
+  box-shadow: 0px 0px 1px 1px $hard_back;
+}
+
 .config select:focus {
+  box-shadow: none;
   border-color: $hard_back;
   outline: none;
 }

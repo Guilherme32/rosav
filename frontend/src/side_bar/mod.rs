@@ -372,13 +372,17 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
         update_power_limits(pwr_min, pwr_max, props.config);
     };
 
-    let acquisitor_select = move |_| match (*acquisitor.get()).as_str() {
-        "file_reader" => (props.config.modify()).acquisitor = AcquisitorSimple::FileReader,
-        "imon" => (props.config.modify()).acquisitor = AcquisitorSimple::Imon,
-        _ => (),
+    let acquisitor_select = move |_| {
+        blur();
+        match (*acquisitor.get()).as_str() {
+            "file_reader" => (props.config.modify()).acquisitor = AcquisitorSimple::FileReader,
+            "imon" => (props.config.modify()).acquisitor = AcquisitorSimple::Imon,
+            _ => (),
+        }
     };
 
     let valley_detection_select = move |_| {
+        blur();
         let prominence_result = prominence.get().parse::<f64>();
         match prominence_result {
             Ok(prominence) => match (*valley_detection.get()).as_str() {
