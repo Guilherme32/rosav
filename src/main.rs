@@ -209,25 +209,25 @@ fn LowerBar<'a, G: Html>(cx: Scope<'a>, props: LowerBarProps<'a>) -> View<G> {
     view! { cx,
         div(class="lower-bar back") {
             div() {
-                button(on:click=enter_traces) { "󰽉 "}
-                button(on:click=enter_config) { "󰢻 "}
+                button(on:click=enter_traces, title="Traços") { "󰽉 "}
+                button(on:click=enter_config, title="Configurações") { "󰢻 "}
             }
             div() {
                 (match *props.connection_state.get() {
                     ConnectionState::Connected =>
                         view! { cx,
-                            button(on:click=start_reading, class="no-offset") { " " }
+                            button(on:click=start_reading, class="no-offset", title="Ler continuamente") { " " }
                             // button(style="padding-right: 0.6rem;") { "󱑹 " }        // TODO put single read
-                            button(on:click=disconnect) { "󱐤 " }
+                            button(on:click=disconnect, title="Desconectar aquisitor") { "󱐤 " }
                         },
                     ConnectionState::Reading =>
                         view! { cx,
-                            button(on:click=stop_reading, class="no-offset") { " " }
-                            button(on:click=disconnect) { "󱐤 " }
+                            button(on:click=stop_reading, class="no-offset", title="Interromper leitura") { " " }
+                            button(on:click=disconnect, title="Desconectar aquisitor") { "󱐤 " }
                         },
                     ConnectionState::Disconnected =>
                         view! { cx,
-                            button(on:click=connect, class="no-offset") { "󱐥 " }
+                            button(on:click=connect, class="no-offset", title="Conectar acquisitor") { "󱐥 " }
                         }
                 })
             }

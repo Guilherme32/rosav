@@ -142,30 +142,30 @@ fn RenderTrace<'a, G: Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<
             }
             div(class="buttons") {
                 (match props.trace.active {
-                    true => view! { cx, button(on:click=click_freeze) { " " } },
-                    false => view! { cx, button(on:click=click_delete) { "󰜺 " } }
+                    true => view! { cx, button(on:click=click_freeze, title="Congelar traço") { " " } },
+                    false => view! { cx, button(on:click=click_delete, title="Excluir traço") { "󰜺 " } }
                 })
 
                 (if props.trace.visible {
-                    view! { cx, button(on:click=click_visibility) { " " } }
+                    view! { cx, button(on:click=click_visibility, title="Esconder traço") { " " } }
                 } else {
-                    view! { cx, button(on:click=click_visibility) { " " } }
+                    view! { cx, button(on:click=click_visibility, title="Revelar traço") { " " } }
                 })
 
                 (if props.trace.active {
                     if *props.saving.get() {
-                        view! { cx, button(on:click=click_save_continuous) { "󱧹 " } }
+                        view! { cx, button(on:click=click_save_continuous, title="Parar de salvar novos traços") { "󱧹 " } }
                     } else {
-                        view! { cx, button(on:click=click_save_continuous) { "󱃩 " } }
+                        view! { cx, button(on:click=click_save_continuous, title="Salvar novos traços") { "󱃩 " } }
                     }
                 } else {
-                    view! { cx, button(on:click=click_save_frozen) { " " } }
+                    view! { cx, button(on:click=click_save_frozen, title="Salvar traço") { " " } }
                 })
 
                 (if props.trace.draw_valleys {
-                    view! { cx, button(on:click=click_draw_valleys) { "󰽅 " } }
+                    view! { cx, button(on:click=click_draw_valleys, title="Esconder vales") { "󰽅 " } }
                 } else {
-                    view! { cx, button(on:click=click_draw_valleys) { "󰆤 " } }
+                    view! { cx, button(on:click=click_draw_valleys, title="Revelar vales") { "󰆤 " } }
                 })
             }
         }
