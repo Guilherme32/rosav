@@ -82,7 +82,7 @@ pub fn get_svg_size(window: tauri::Window) -> (u32, u32) {
 
 #[tauri::command]
 pub fn get_wavelength_limits(handler: tauri::State<SpectrumHandler>) -> (f64, f64) {
-    let limits = handler.get_limits();
+    let limits = handler.get_limits(handler.get_max_power());
 
     if let Some(limits) = limits {
         limits.wavelength
@@ -105,7 +105,7 @@ pub fn get_power_limits(handler: tauri::State<SpectrumHandler>) -> (f64, f64) {
         0.0
     };
 
-    let limits = handler.get_limits();
+    let limits = handler.get_limits(handler.get_max_power());
 
     if let Some(limits) = limits {
         (limits.power.1 + offset, limits.power.0 + offset)

@@ -123,9 +123,10 @@ impl SpectrumHandler {
 
 impl SpectrumHandler {
     pub fn get_last_spectrum_path(&self, svg_limits: (u32, u32)) -> Option<String> {
+        let max_power = self.get_max_power();
         let spectrum = self.last_spectrum.lock().unwrap();
 
-        if let Some(spectrum_limits) = self.get_limits() {
+        if let Some(spectrum_limits) = self.get_limits(max_power) {
             self.unread_spectrum.store(false, atomic::Ordering::Relaxed);
             (*spectrum)
                 .as_ref()
@@ -139,12 +140,13 @@ impl SpectrumHandler {
         &self,
         svg_limits: (u32, u32),
     ) -> Option<Vec<(f64, f64)>> {
+        let max_power = self.get_max_power();
         let mut spectrum = self.last_spectrum.lock().unwrap();
         let config = self.config.lock().unwrap();
         let method = config.valley_detection.clone();
         drop(config); // Get_limits will also ask for it, making a *deadlock*
 
-        if let Some(spectrum_limits) = self.get_limits() {
+        if let Some(spectrum_limits) = self.get_limits(max_power) {
             (*spectrum)
                 .as_mut()
                 .map(|spectrum| spectrum.get_valleys_points(svg_limits, &spectrum_limits, method))
@@ -158,33 +160,25 @@ impl SpectrumHandler {
         let frozen_spectra = self.frozen_spectra.lock().unwrap();
         let mut limits = self.spectrum_limits.lock().unwrap();
 
-        let new_limits = match &*limits {
-            Some(limits) => frozen_spectra
+        if let Some(spectrum) = active_spectrum.as_ref() {
+            let mut new_limits = frozen_spectra
                 .iter()
-                .chain(&*active_spectrum)
                 .map(|spectrum| &(spectrum.limits))
-                .fold((*limits).clone(), |acc, new| Limits {
+                .fold(spectrum.limits.clone(), |acc, new| Limits {
                     wavelength: (
                         acc.wavelength.0.min(new.wavelength.0),
                         acc.wavelength.1.max(new.wavelength.1),
                     ),
-                    power: (
-                        acc.power.0.min(new.power.0 - 3.0),
-                        acc.power.1.max(new.power.1 + 3.0),
-                    ),
-                }),
-            None => match active_spectrum.as_ref() {
-                Some(spectrum) => spectrum.limits.clone(),
-                None => {
-                    return;
-                }
-            },
-        };
+                    power: (acc.power.0.min(new.power.0), acc.power.1.max(new.power.1)),
+                });
 
-        *limits = Some(new_limits);
+            new_limits.power.0 -= 3.0;
+            new_limits.power.1 += 3.0;
+            *limits = Some(new_limits);
+        }
     }
 
-    pub fn get_limits(&self) -> Option<Limits> {
+    pub fn get_limits(&self, power_offset: f64) -> Option<Limits> {
         let config = self.config.lock().unwrap();
 
         let default_limits = self.spectrum_limits.lock().unwrap();
@@ -200,7 +194,7 @@ impl SpectrumHandler {
         };
 
         let limits_pwr = match config.power_limits {
-            Some(limits) => limits,
+            Some(limits) => (limits.0 + power_offset, limits.1 + power_offset),
             None => default_limits.power,
         };
 
@@ -263,6 +257,7 @@ impl SpectrumHandler {
     }
 
     pub fn get_frozen_spectrum_path(&self, id: usize, svg_limits: (u32, u32)) -> Option<String> {
+        let max_power = self.get_max_power();
         let frozen_list = self.frozen_spectra.lock().unwrap();
 
         if id >= frozen_list.len() {
@@ -276,7 +271,7 @@ impl SpectrumHandler {
 
         let spectrum = &frozen_list[id];
 
-        self.get_limits()
+        self.get_limits(max_power)
             .map(|spectrum_limits| spectrum.to_path(svg_limits, &spectrum_limits))
     }
 
@@ -285,6 +280,7 @@ impl SpectrumHandler {
         id: usize,
         svg_limits: (u32, u32),
     ) -> Option<Vec<(f64, f64)>> {
+        let max_power = self.get_max_power();
         let mut frozen_list = self.frozen_spectra.lock().unwrap();
         let config = self.config.lock().unwrap();
         let method = config.valley_detection.clone();
@@ -301,7 +297,7 @@ impl SpectrumHandler {
 
         let spectrum = &mut frozen_list[id];
 
-        self.get_limits().map(|spectrum_limits| {
+        self.get_limits(max_power).map(|spectrum_limits| {
             spectrum.get_valleys_points(svg_limits, &spectrum_limits, method)
         })
     }
