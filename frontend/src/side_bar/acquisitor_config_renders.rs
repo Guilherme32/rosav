@@ -5,6 +5,17 @@ use crate::api::*;
 use crate::side_bar::check_number_input;
 use acquisitors::*;
 
+use wasm_bindgen::prelude::wasm_bindgen;
+#[wasm_bindgen(inline_js = "export function blur() { document.activeElement.blur(); }")]
+extern "C" {
+    fn blur();
+}
+
+fn form_blur(event: rt::Event) {
+    event.prevent_default();
+    blur();
+}
+
 #[component]
 pub fn RenderFileReaderConfig<G: Html>(cx: Scope) -> View<G> {
     let config = create_signal(cx, empty_file_reader_config());
@@ -42,10 +53,8 @@ pub fn RenderFileReaderConfig<G: Html>(cx: Scope) -> View<G> {
         });
     });
 
-    let do_nothing = |event: rt::Event| event.prevent_default();
-
     view! { cx,
-        form(on:submit=do_nothing) {
+        form(on:submit=form_blur) {
             input(type="submit", style="display: none;")
 
             p(class="mini-title") {
@@ -73,14 +82,17 @@ pub fn RenderImonConfig<G: Html>(cx: Scope) -> View<G> {
     let read_delay = create_signal(cx, String::new());
 
     spawn_local_scoped(cx, async move {
-        // Get old config
-        let _config = get_acquisitor_config().await;
+        // Get old config. Retries a few times
+        for _ in 0..3 {
+            let _config = get_acquisitor_config().await;
 
-        if let AcquisitorConfig::ImonConfig(_config) = _config {
-            exposure.set(_config.exposure_ms.to_string());
-            read_delay.set(_config.read_delay_ms.to_string());
+            if let AcquisitorConfig::ImonConfig(_config) = _config {
+                exposure.set(_config.exposure_ms.to_string());
+                read_delay.set(_config.read_delay_ms.to_string());
 
-            config.set(_config);
+                config.set(_config);
+                return;
+            }
         }
     });
 
@@ -113,7 +125,7 @@ pub fn RenderImonConfig<G: Html>(cx: Scope) -> View<G> {
     };
 
     view! { cx,
-        form(on:submit=update_config) {
+        form(on:submit=form_blur) {
             input(type="submit", style="display: none;")
 
             p(class="mini-title") {
