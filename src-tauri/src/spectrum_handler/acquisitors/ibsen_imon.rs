@@ -335,7 +335,7 @@ fn find_imon() -> Result<Box<dyn SerialPort>, Box<dyn Error>> {
 
 fn is_imon(port: SerialPortInfo) -> Result<Box<dyn SerialPort>, Box<dyn Error>> {
     if let UsbPort(_) = port.port_type {
-        let mut port = new(port.port_name, 115200) //921_000)
+        let mut port = new(port.port_name, 115200)
             .timeout(Duration::from_millis(100))
             .open()?;
 
@@ -457,20 +457,7 @@ struct ConstantReadArgs {
     dark_pixels: Vec<u32>,
 }
 
-fn constant_read(
-    // last_spectrum: Arc<Mutex<Option<Spectrum>>>,
-    // new_spectrum: Arc<AtomicBool>,
-    // saving: Arc<AtomicBool>,
-    // auto_save_path: &Path,
-    // log_tx: Arc<SyncSender<Log>>,
-    // state: Arc<Mutex<ImonState>>,
-    // config_rx: Receiver<ImonConfig>,
-    // port: Arc<Mutex<Box<dyn SerialPort>>>,
-    // n_pixels: u32,
-    // coefficients: ImonCoefficients,
-    // dark_pixels: Vec<u32>,
-    args: ConstantReadArgs,
-) {
+fn constant_read(args: ConstantReadArgs) {
     let mut config = default_config();
     loop {
         sleep(Duration::from_millis(config.read_delay_ms));
