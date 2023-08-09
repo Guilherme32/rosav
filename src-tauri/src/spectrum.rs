@@ -326,10 +326,14 @@ impl Spectrum {
             .iter()
             .map(|peak| self.get_valley_range(peak))
             .map(|peak| approximate_lorentz(&self.values[peak]))
+            .filter(|valley| valley.is_some())
             .collect();
 
         self.info.valleys = valleys;
         self.info.valley_detection = ValleyDetection::Lorentz { prominence };
+        if self.info.valleys.is_none() {
+            self.info.valleys = Some(vec![]);
+        }
 
         // Can unwrap, just put it in a Some
         (self.info.valleys.as_ref()).unwrap()
@@ -422,6 +426,13 @@ pub fn approximate_lorentz(values: &[SpectrumValue]) -> Option<SpectrumValue> {
 
     let power =
         lorentz(&wavelength, optimized_params[0], optimized_params[1])[0] * coeffs[0] + coeffs[1];
+
+    let min_wl = values[0].wavelength;
+    let max_wl = values[values.len() - 1].wavelength;
+    if !(min_wl..=max_wl).contains(&wavelength[0]) {
+        // Wavelength calculated outside the valley
+        return None;
+    }
 
     Some(SpectrumValue {
         wavelength: wavelength[0],
