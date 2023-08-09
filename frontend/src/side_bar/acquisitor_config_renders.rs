@@ -21,10 +21,14 @@ pub fn RenderFileReaderConfig<G: Html>(cx: Scope) -> View<G> {
     let config = create_signal(cx, empty_file_reader_config());
 
     spawn_local_scoped(cx, async move {
-        // Get old config
-        let _config = get_acquisitor_config().await;
-        if let AcquisitorConfig::FileReaderConfig(_config) = _config {
-            config.set(_config);
+        // Get old config. Retries a few times
+        for _ in 0..3 {
+            let _config = get_acquisitor_config().await;
+
+            if let AcquisitorConfig::FileReaderConfig(_config) = _config {
+                config.set(_config);
+                return;
+            }
         }
     });
 
