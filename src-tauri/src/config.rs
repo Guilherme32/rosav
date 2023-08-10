@@ -25,7 +25,10 @@ pub fn handler_config_path() -> PathBuf {
 
 pub fn load_handler_config() -> Result<HandlerConfig, Box<dyn Error>> {
     let text = read_to_string(handler_config_path())?;
-    let config: HandlerConfig = toml::from_str(&text)?;
+    let mut config: HandlerConfig = toml::from_str(&text)?;
+
+    config.wavelength_limits = None; // It doesn't really make a lot of sense to keep
+    config.power_limits = None; // the limits between uses
 
     Ok(config)
 }
