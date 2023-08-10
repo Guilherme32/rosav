@@ -8,6 +8,8 @@ use sycamore::futures::{spawn_local, spawn_local_scoped};
 
 use gloo_timers::future::TimeoutFuture;
 
+pub mod js_glue;
+
 pub mod api;
 use api::*;
 
@@ -79,8 +81,6 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
                     trace.svg_path = new_path;
                     trace.valleys = new_valleys;
                 };
-                // continue; // Skip the loop to end the modify() and avoid problems
-                // TODO remove. Test if the change does not make weird modify problems
             }
         }
     });
@@ -88,7 +88,7 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
     // Update on window / config / info update
     spawn_local_scoped(cx, async move {
         loop {
-            TimeoutFuture::new(200).await; // 5 fps, #TODO send to config / use as event
+            TimeoutFuture::new(100).await; // 10 fps, TODO send to config / use as event
             let current_info = get_trace_info().await;
 
             let new_svg_size = get_svg_size().await;
@@ -124,6 +124,7 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
     });
 
     let active_side = create_signal(cx, ActiveSide::Traces);
+    let limits_change_flag = create_signal(cx, false);
 
     view! { cx,
         div(class="horizontal-container") {
@@ -131,13 +132,15 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
             SideBar(
                 traces=traces,
                 saving=saving,
-                active_side=active_side
+                active_side=active_side,
+                limits_change_flag=limits_change_flag
             )
 
             div(class="vertical-container") {
                 Graph(
                     traces=traces,
-                    svg_size=svg_size
+                    svg_size=svg_size,
+                    limits_change_flag=limits_change_flag
                 )
 
                 LowerBar(

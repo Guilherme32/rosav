@@ -16,6 +16,7 @@ pub struct SideBarProps<'a> {
     traces: &'a Signal<Vec<Trace>>,
     saving: &'a Signal<bool>,
     active_side: &'a ReadSignal<ActiveSide>,
+    limits_change_flag: &'a Signal<bool>,
 }
 
 #[component]
@@ -32,7 +33,7 @@ pub fn SideBar<'a, G: Html>(cx: Scope<'a>, props: SideBarProps<'a>) -> View<G> {
                     },
                 ActiveSide::Config =>
                     view! { cx,
-                        ConfigWindow {}
+                        ConfigWindow(limits_change_flag=props.limits_change_flag)
                     }
             })
             LogSpace {}
@@ -271,15 +272,20 @@ fn LogSpace<G: Html>(cx: Scope) -> View<G> {
     }
 }
 
+#[derive(Prop)]
+struct ConfigWindowProps<'a> {
+    limits_change_flag: &'a Signal<bool>,
+}
+
 #[component]
-fn ConfigWindow<G: Html>(cx: Scope) -> View<G> {
+fn ConfigWindow<'a, G: Html>(cx: Scope<'a>, props: ConfigWindowProps<'a>) -> View<G> {
     let handler_config = create_signal(cx, empty_handler_config());
 
     view! { cx,
         div(class="side-bar-main") {
             div(class="side-container back config") {
                 p(class="title") { "Configurações" }
-                RenderHandlerConfig (config=handler_config)
+                RenderHandlerConfig (config=handler_config, limits_change_flag=props.limits_change_flag)
                 RenderAcquisitorConfig (handler_config=handler_config)
             }
         }
@@ -291,9 +297,65 @@ extern "C" {
     fn blur();
 }
 
+async fn get_old_handler_config<'a>(
+    wl_min: &Signal<String>,
+    wl_max: &Signal<String>,
+    pwr_min: &Signal<String>,
+    pwr_max: &Signal<String>,
+    prominence: &Signal<String>,
+    valley_detection: &Signal<String>,
+    acquisitor: &Signal<String>,
+) -> HandlerConfig {
+    // Also updates on every field
+    let _config = get_handler_config().await;
+
+    if let Some(wl_limits) = _config.wavelength_limits {
+        // Update wl limits input
+        wl_min.set(format!("{:.1}", wl_limits.0 * 1e9));
+        wl_max.set(format!("{:.1}", wl_limits.1 * 1e9));
+    } else {
+        wl_min.set("".to_string());
+        wl_max.set("".to_string());
+    }
+
+    if let Some(pwr_limits) = _config.power_limits {
+        // Update pwr limits input
+        pwr_min.set(format!("{:.2}", pwr_limits.0));
+        pwr_max.set(format!("{:.2}", pwr_limits.1));
+    } else {
+        pwr_min.set("".to_string());
+        pwr_max.set("".to_string());
+    }
+
+    match _config.acquisitor {
+        AcquisitorSimple::FileReader => acquisitor.set("file_reader".to_string()),
+        AcquisitorSimple::Imon => acquisitor.set("imon".to_string()),
+    }
+
+    let _prominence = match _config.valley_detection {
+        ValleyDetection::None => {
+            valley_detection.set("none".to_string());
+            3.0
+        }
+        ValleyDetection::Simple { prominence } => {
+            valley_detection.set("simple".to_string());
+            prominence
+        }
+        ValleyDetection::Lorentz { prominence } => {
+            valley_detection.set("lorentz".to_string());
+            prominence
+        }
+    };
+
+    prominence.set(_prominence.to_string());
+
+    _config
+}
+
 #[derive(Prop)]
 struct HandlerConfigProps<'a> {
     config: &'a Signal<HandlerConfig>,
+    limits_change_flag: &'a Signal<bool>,
 }
 
 #[component]
@@ -310,42 +372,16 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
     let acquisitor = create_signal(cx, String::new());
 
     spawn_local_scoped(cx, async move {
-        // Get old config
-        let _config = get_handler_config().await;
-        if let Some(wl_limits) = _config.wavelength_limits {
-            // Update wl limits input
-            wl_min.set(format!("{:.1}", wl_limits.0 * 1e9));
-            wl_max.set(format!("{:.1}", wl_limits.1 * 1e9));
-        }
-
-        if let Some(pwr_limits) = _config.power_limits {
-            // Update pwr limits input
-            pwr_min.set(format!("{}", pwr_limits.0));
-            pwr_max.set(format!("{}", pwr_limits.1));
-        }
-
-        match _config.acquisitor {
-            AcquisitorSimple::FileReader => acquisitor.set("file_reader".to_string()),
-            AcquisitorSimple::Imon => acquisitor.set("imon".to_string()),
-        }
-
-        let _prominence = match _config.valley_detection {
-            ValleyDetection::None => {
-                valley_detection.set("none".to_string());
-                3.0
-            }
-            ValleyDetection::Simple { prominence } => {
-                valley_detection.set("simple".to_string());
-                prominence
-            }
-            ValleyDetection::Lorentz { prominence } => {
-                valley_detection.set("lorentz".to_string());
-                prominence
-            }
-        };
-
-        prominence.set(_prominence.to_string());
-
+        let _config = get_old_handler_config(
+            wl_min,
+            wl_max,
+            pwr_min,
+            pwr_max,
+            prominence,
+            valley_detection,
+            acquisitor,
+        )
+        .await;
         props.config.set(_config); // Update whole config
     });
 
@@ -409,6 +445,26 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
         spawn_local_scoped(cx, async move {
             if *props.config.get() != empty_handler_config() {
                 apply_handler_config((*props.config.get()).clone()).await;
+            }
+        });
+    });
+
+    create_effect(cx, move || {
+        props.limits_change_flag.track();
+        spawn_local_scoped(cx, async move {
+            if *props.limits_change_flag.get() {
+                let _config = get_old_handler_config(
+                    wl_min,
+                    wl_max,
+                    pwr_min,
+                    pwr_max,
+                    prominence,
+                    valley_detection,
+                    acquisitor,
+                )
+                .await;
+                props.config.set(_config); // Update whole config on zoom
+                props.limits_change_flag.set(false);
             }
         });
     });

@@ -276,6 +276,15 @@ pub async fn apply_handler_config(newConfig: HandlerConfig) {
     .await;
 }
 
+pub async fn change_limits(wavelength: Option<(f64, f64)>, power: Option<(f64, f64)>) {
+    let mut config = get_handler_config().await;
+
+    config.wavelength_limits = wavelength;
+    config.power_limits = power;
+
+    apply_handler_config(config).await;
+}
+
 // SubRegion: Acquisitor config --------------------------------------------------------------------
 
 pub async fn get_acquisitor_config() -> AcquisitorConfig {

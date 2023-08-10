@@ -3,18 +3,247 @@ use sycamore::futures::spawn_local_scoped;
 use sycamore::prelude::*;
 
 use crate::api::*;
+use crate::js_glue::*;
 use crate::trace::*;
+
+fn is_inside_graph(
+    coordinates: (i32, i32),
+    limits_x: (i32, i32),
+    limits_y: (i32, i32),
+    expand_limits: bool,
+) -> bool {
+    if expand_limits {
+        ((limits_x.0 - 40)..(limits_x.1 + 40)).contains(&coordinates.0)
+            && ((limits_y.0 - 40)..(limits_y.1 + 40)).contains(&coordinates.1)
+    } else {
+        (limits_x.0..limits_x.1).contains(&coordinates.0)
+            && (limits_y.0..limits_y.1).contains(&coordinates.1)
+    }
+}
+
+fn global_to_graph_pixel(coordinates: (i32, i32)) -> (i32, i32) {
+    (coordinates.0 - 214, coordinates.1 - 10)
+}
+
+fn clip_to_graph(local_coordinates: (i32, i32), graph_size: (i32, i32)) -> (i32, i32) {
+    let x = if local_coordinates.0 < 2 {
+        2
+    } else if local_coordinates.0 > graph_size.0 - 2 {
+        graph_size.0 - 2
+    } else {
+        local_coordinates.0
+    };
+
+    let y = if local_coordinates.1 < 2 {
+        2
+    } else if local_coordinates.1 > graph_size.1 - 2 {
+        graph_size.1 - 2
+    } else {
+        local_coordinates.1
+    };
+
+    (x, y)
+}
+
+fn svg_to_graph_size(svg_size: (i32, i32)) -> (i32, i32) {
+    (
+        svg_size.0 - 40, // 32 e 16 para os labels dos eixos
+        svg_size.1 - 16,
+    )
+}
+
+fn fix_positions(
+    start_position: (i32, i32),
+    end_position: (i32, i32),
+    svg_size: (i32, i32),
+) -> ((i32, i32), (i32, i32)) {
+    let (mut start_x, mut start_y) = global_to_graph_pixel(start_position);
+    let (end_x, end_y) = global_to_graph_pixel(end_position);
+
+    let graph_size = svg_to_graph_size(svg_size);
+    let (mut end_x, mut end_y) = clip_to_graph((end_x, end_y), graph_size);
+
+    if start_x > end_x {
+        (start_x, end_x) = (end_x, start_x);
+    }
+    if start_y > end_y {
+        (start_y, end_y) = (end_y, start_y);
+    }
+
+    ((start_x, start_y), (end_x, end_y))
+}
+
+fn graph_to_spectrum_point(
+    graph_point: (i32, i32),
+    svg_size: (i32, i32),
+    power_limits: (f64, f64),
+    wavelength_limits: (f64, f64),
+) -> (f64, f64) {
+    let graph_size = svg_to_graph_size(svg_size);
+
+    let graph_x = graph_point.0 as f64;
+    let x_t = graph_x / (graph_size.0 as f64);
+    let wavelength = wavelength_limits.0 + x_t * (wavelength_limits.1 - wavelength_limits.0);
+
+    let graph_y = graph_point.1 as f64;
+    let y_t = graph_y / (graph_size.1 as f64);
+    let power = power_limits.0 + y_t * (power_limits.1 - power_limits.0);
+
+    (wavelength, power)
+}
 
 #[derive(Prop)]
 pub struct GraphProps<'a> {
     svg_size: &'a ReadSignal<(i32, i32)>,
     traces: &'a ReadSignal<Vec<Trace>>,
+    limits_change_flag: &'a Signal<bool>,
 }
 
 #[component]
 pub fn Graph<'a, G: Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
+    let selecting = create_signal(cx, false);
+    let pointer_down = create_signal(cx, false);
+    let starting_position = create_signal(cx, (0, 0));
+    let position = create_signal(cx, (0, 0));
+
+    let graph_x_bounds = create_memo(cx, || {
+        let min = 210;
+        let max = min + props.svg_size.get().0 - 40;
+        (min, max)
+    });
+    let graph_y_bounds = create_memo(cx, || {
+        let min = 5;
+        let max = min + props.svg_size.get().1 - 16;
+        (min, max)
+    });
+
+    spawn_local_scoped(cx, async move {
+        loop {
+            wait_for_pointer_up().await;
+            pointer_down.set(false);
+            if *selecting.get() {
+                let ((start_x, start_y), (end_x, end_y)) = fix_positions(
+                    *starting_position.get(),
+                    *position.get(),
+                    *props.svg_size.get(),
+                );
+
+                let new_min = graph_to_spectrum_point(
+                    (start_x, end_y), // SVG space is inverted on the y axis
+                    *props.svg_size.get(),
+                    get_power_limits().await,
+                    get_wavelength_limits().await,
+                );
+                let new_max = graph_to_spectrum_point(
+                    (end_x, start_y),
+                    *props.svg_size.get(),
+                    get_power_limits().await,
+                    get_wavelength_limits().await,
+                );
+                let wavelength_limits = (new_min.0, new_max.0);
+                let power_limits = (new_min.1, new_max.1);
+                change_limits(Some(wavelength_limits), Some(power_limits)).await;
+
+                props.limits_change_flag.set(true);
+            }
+            selecting.set(false);
+        }
+    });
+
+    spawn_local_scoped(cx, async move {
+        loop {
+            wait_for_pointer_down().await;
+            pointer_down.set(true);
+
+            let new_position = get_pointer_position();
+            if is_inside_graph(
+                new_position,
+                *graph_x_bounds.get(),
+                *graph_y_bounds.get(),
+                false,
+            ) {
+                starting_position.set(get_pointer_position());
+                position.set(get_pointer_position());
+                selecting.set(true);
+            }
+        }
+    });
+
+    create_effect(cx, move || {
+        if *selecting.get() {
+            spawn_local_scoped(cx, async move {
+                while *selecting.get() {
+                    let new_position = get_pointer_position();
+                    if !is_inside_graph(
+                        new_position,
+                        *graph_x_bounds.get(),
+                        *graph_y_bounds.get(),
+                        true,
+                    ) {
+                        selecting.set(false);
+                        break;
+                    }
+
+                    position.set(new_position);
+                    wait_for_pointer_move().await;
+                }
+            })
+        }
+    });
+
+    let zoom_rect = create_memo(cx, move || {
+        if !*selecting.get() {
+            return view! { cx, "" };
+        }
+
+        let ((start_x, start_y), (end_x, end_y)) = fix_positions(
+            *starting_position.get(),
+            *position.get(),
+            *props.svg_size.get(),
+        );
+
+        let height = (end_y - start_y).to_string();
+        let width = (end_x - start_x).to_string();
+        let start_x = start_x.to_string();
+        let start_y = start_y.to_string();
+        view! { cx,
+            rect(
+                x=start_x,
+                y=start_y,
+                height=height,
+                width=width,
+                stroke="#938056",
+                rx=0,
+                fill="#938056",
+                fill-opacity=0.2
+            ) {}
+        }
+    });
+
+    // Undo zoom
+    spawn_local_scoped(cx, async move {
+        loop {
+            wait_for_right_button_down().await;
+
+            let position = get_pointer_position();
+            if is_inside_graph(
+                position,
+                *graph_x_bounds.get(),
+                *graph_y_bounds.get(),
+                false,
+            ) {
+                change_limits(None, None).await;
+                props.limits_change_flag.set(true);
+            }
+        }
+    });
+
+    // TODO put a svg path as a memo of the position, selecting and start position
+    // The svg will have to translate pixel space to graph space
+    // Then make the config actually change with the on mouse up
+
     view! { cx,
-        div(class="graph-space back") {
+        div(class="graph-space back", id="graph_space") {
             svg(
                 width=props.svg_size.get().0,
                 height=props.svg_size.get().1)
@@ -32,6 +261,7 @@ pub fn Graph<'a, G: Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
                         draw_trace(cx, trace)
                     }
                 )
+                (*zoom_rect.get())
             }
         }
     }
@@ -56,12 +286,7 @@ struct FrameProps<'a> {
 
 #[component]
 fn GraphFrame<'a, G: Html>(cx: Scope<'a>, props: FrameProps<'a>) -> View<G> {
-    let graph_size = create_memo(cx, || {
-        (
-            (props.svg_size.get()).0 - 40, // 32 e 16 para os labels dos eixos
-            (props.svg_size.get()).1 - 16,
-        )
-    });
+    let graph_size = create_memo(cx, || svg_to_graph_size(*props.svg_size.get()));
 
     let path_sqr = create_memo(cx, || {
         format!(
