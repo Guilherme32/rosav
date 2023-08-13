@@ -170,22 +170,22 @@ fn RenderTrace<'a, G: Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<
                 })
 
                 (if props.trace.visible {
-                    view! { cx, button(on:click=click_visibility, title="Esconder traço") { "󰈉 " } }
+                    view! { cx, button(on:click=click_visibility, title="Esconder traço") { "󰈈 " } }
                 } else {
-                    view! { cx, button(on:click=click_visibility, title="Revelar traço") { "󰈈 " } }
+                    view! { cx, button(on:click=click_visibility, title="Revelar traço") { "󰈉 " } }
                 })
 
                 (if props.trace.draw_valleys {
-                    view! { cx, button(on:click=click_draw_valleys, title="Esconder vales") { "󰽅 " } }
+                    view! { cx, button(on:click=click_draw_valleys, title="Esconder vales") { "󰆤 " } }
                 } else {
-                    view! { cx, button(on:click=click_draw_valleys, title="Revelar vales") { "󰆤 " } }
+                    view! { cx, button(on:click=click_draw_valleys, title="Revelar vales") { "󰽅 " } }
                 })
 
                 (if props.trace.active {
                     if *props.saving.get() {
-                        view! { cx, button(on:click=click_save_continuous, title="Parar de salvar novos traços") { "󱧹 " } }
+                        view! { cx, button(on:click=click_save_continuous, title="Parar de salvar novos traços") { "󱃩 " } }
                     } else {
-                        view! { cx, button(on:click=click_save_continuous, title="Salvar novos traços") { "󱃩 " } }
+                        view! { cx, button(on:click=click_save_continuous, title="Salvar novos traços") { "󱧹 " } }
                     }
                 } else {
                     view! { cx, button(on:click=click_save_frozen, title="Salvar traço") { " " } }
@@ -194,11 +194,98 @@ fn RenderTrace<'a, G: Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<
                 button(on:click=click_change_color, title="Mudar cor do traço") { "󰈊 " }
 
                 (if props.trace.draw_valleys_mean {
-                    view! { cx, button(on:click=click_draw_valleys_mean, title="Esconder médias") { "󰍑 " } }
+                    view! { cx, button(on:click=click_draw_valleys_mean, title="Esconder médias") { "󰍐 " } }
                 } else {
-                    view! { cx, button(on:click=click_draw_valleys_mean, title="Revelar médias") { "󰍐 " } }
+                    view! { cx, button(on:click=click_draw_valleys_mean, title="Revelar médias") { "󰍑 " } }
                 })
             }
+        }
+    }
+}
+
+async fn hide_all_traces(traces_list: &Signal<Vec<Trace>>) {
+    for mut trace in (*traces_list.modify()).iter_mut() {
+        trace.visible = false;
+    }
+}
+
+async fn show_all_traces(traces_list: &Signal<Vec<Trace>>) {
+    for mut trace in (*traces_list.modify()).iter_mut() {
+        trace.visible = true;
+    }
+}
+
+async fn hide_all_valleys(traces_list: &Signal<Vec<Trace>>) {
+    for mut trace in (*traces_list.modify()).iter_mut() {
+        trace.draw_valleys = false;
+    }
+}
+
+async fn show_all_valleys(traces_list: &Signal<Vec<Trace>>) {
+    for mut trace in (*traces_list.modify()).iter_mut() {
+        trace.draw_valleys = true;
+    }
+}
+
+async fn hide_all_means(traces_list: &Signal<Vec<Trace>>) {
+    for mut trace in (*traces_list.modify()).iter_mut() {
+        trace.draw_valleys_mean = false;
+    }
+}
+
+async fn show_all_means(traces_list: &Signal<Vec<Trace>>) {
+    for mut trace in (*traces_list.modify()).iter_mut() {
+        trace.draw_valleys_mean = true;
+    }
+}
+
+#[derive(Prop)]
+struct GlobalTraceButtons<'a> {
+    traces: &'a Signal<Vec<Trace>>,
+}
+
+#[component]
+fn GlobalTraceButtons<'a, G: Html>(cx: Scope<'a>, props: GlobalTraceButtons<'a>) -> View<G> {
+    let click_hide_all_traces = move |_| {
+        spawn_local_scoped(cx, async move {
+            hide_all_traces(props.traces).await;
+        })
+    };
+    let click_show_all_traces = move |_| {
+        spawn_local_scoped(cx, async move {
+            show_all_traces(props.traces).await;
+        })
+    };
+    let click_hide_all_valleys = move |_| {
+        spawn_local_scoped(cx, async move {
+            hide_all_valleys(props.traces).await;
+        })
+    };
+    let click_show_all_valleys = move |_| {
+        spawn_local_scoped(cx, async move {
+            show_all_valleys(props.traces).await;
+        })
+    };
+    let click_hide_all_means = move |_| {
+        spawn_local_scoped(cx, async move {
+            hide_all_means(props.traces).await;
+        })
+    };
+    let click_show_all_means = move |_| {
+        spawn_local_scoped(cx, async move {
+            show_all_means(props.traces).await;
+        })
+    };
+
+    view! { cx,
+        div(class="global-buttons") {
+            button(on:click=click_hide_all_traces, title="Esconder todos os traços") { "󰈉 " }
+            button(on:click=click_show_all_traces, title="Revelar todos os traços") { "󰈈 " }
+            button(on:click=click_hide_all_valleys, title="Esconder todos os vales") { "󰽅 " }
+            button(on:click=click_show_all_valleys, title="Revelar todos os vales") { "󰆤 " }
+            button(on:click=click_hide_all_means, title="Esconder todas as médias") { "󰍑 " }
+            button(on:click=click_show_all_means, title="Revelar todas as médias") { "󰍐 " }
+            button(title="Salvar todos os traços") { " " }
         }
     }
 }
@@ -214,6 +301,8 @@ fn SideBarMain<'a, G: Html>(cx: Scope<'a>, props: SideBarMainProps<'a>) -> View<
     view! { cx,
         div(class="side-bar-main") {
             p(class="title") { "Traços" }
+
+            GlobalTraceButtons(traces=props.traces)
 
             div(class="side-container back") {
                 Keyed(        // Only re-renders on key change

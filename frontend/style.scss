@@ -130,6 +130,18 @@ body {
   font-size: 1rem;
 }
 
+.global-buttons {
+  width: 100%;
+  display: flex;
+  flex-direction: line;
+  overflow: hidden;
+}
+
+.global-buttons button {
+  padding-right: 0.5rem;
+  width: 85px;  /* This width is actually a maximum. It is usually determined by the flex container */
+}
+
 .side-container {
   flex: 1;
   overflow-x: hidden;
