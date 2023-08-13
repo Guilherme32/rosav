@@ -377,8 +377,8 @@ fn ConfigWindow<'a, G: Html>(cx: Scope<'a>, props: ConfigWindowProps<'a>) -> Vie
 
     view! { cx,
         div(class="side-bar-main") {
+            p(class="title") { "Configurações" }
             div(class="side-container back config") {
-                p(class="title") { "Configurações" }
                 RenderHandlerConfig (config=handler_config, limits_change_flag=props.limits_change_flag)
                 RenderAcquisitorConfig (handler_config=handler_config)
             }
