@@ -43,7 +43,7 @@ pub enum ConnectionState {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(tag = "type")]
-pub enum ValleyDetection {
+pub enum CriticalDetection {
     None,
     Simple { prominence: f64 },
     Lorentz { prominence: f64 },
@@ -55,7 +55,8 @@ pub struct HandlerConfig {
     pub wavelength_limits: Option<(f64, f64)>,
     pub power_limits: Option<(f64, f64)>,
     pub acquisitor: acquisitors::AcquisitorSimple,
-    pub valley_detection: ValleyDetection,
+    pub valley_detection: CriticalDetection,
+    pub peak_detection: CriticalDetection,
 }
 
 pub fn empty_handler_config() -> HandlerConfig {
@@ -64,7 +65,8 @@ pub fn empty_handler_config() -> HandlerConfig {
         wavelength_limits: None,
         power_limits: None,
         acquisitor: AcquisitorSimple::FileReader,
-        valley_detection: ValleyDetection::None,
+        valley_detection: CriticalDetection::None,
+        peak_detection: CriticalDetection::None,
     }
 }
 
@@ -105,6 +107,13 @@ pub async fn get_last_spectrum_path() -> String {
 
 pub async fn get_last_spectrum_valleys_points() -> Vec<(f64, f64)> {
     let from_back = invoke("get_last_spectrum_valleys_points", to_value(&()).unwrap()).await;
+    let obj_rebuilt: Vec<(f64, f64)> = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}
+
+pub async fn get_last_spectrum_peaks_points() -> Vec<(f64, f64)> {
+    let from_back = invoke("get_last_spectrum_peaks_points", to_value(&()).unwrap()).await;
     let obj_rebuilt: Vec<(f64, f64)> = from_value(from_back).unwrap();
 
     obj_rebuilt
@@ -153,9 +162,16 @@ pub async fn get_time() -> String {
     obj_rebuilt
 }
 
-pub async fn get_valley_detection() -> ValleyDetection {
+pub async fn get_valley_detection() -> CriticalDetection {
     let from_back = invoke("get_valley_detection", to_value(&()).unwrap()).await;
-    let obj_rebuilt: ValleyDetection = from_value(from_back).unwrap();
+    let obj_rebuilt: CriticalDetection = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}
+
+pub async fn get_peak_detection() -> CriticalDetection {
+    let from_back = invoke("get_peak_detection", to_value(&()).unwrap()).await;
+    let obj_rebuilt: CriticalDetection = from_value(from_back).unwrap();
 
     obj_rebuilt
 }
@@ -187,6 +203,17 @@ pub async fn get_frozen_spectrum_path(id: usize) -> String {
 pub async fn get_frozen_spectrum_valleys_points(id: usize) -> Vec<(f64, f64)> {
     let from_back = invoke(
         "get_frozen_spectrum_valleys_points",
+        to_value(&IdArgs { id }).unwrap(),
+    )
+    .await;
+    let obj_rebuilt: Vec<(f64, f64)> = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}
+
+pub async fn get_frozen_spectrum_peaks_points(id: usize) -> Vec<(f64, f64)> {
+    let from_back = invoke(
+        "get_frozen_spectrum_peaks_points",
         to_value(&IdArgs { id }).unwrap(),
     )
     .await;

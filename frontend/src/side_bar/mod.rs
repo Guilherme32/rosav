@@ -176,9 +176,9 @@ fn RenderTrace<'a, G: Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<
                 })
 
                 (if props.trace.draw_valleys {
-                    view! { cx, button(on:click=click_draw_valleys, title="Esconder vales") { "󰆤 " } }
+                    view! { cx, button(on:click=click_draw_valleys, title="Esconder vales/picos") { "󰆤 " } }
                 } else {
-                    view! { cx, button(on:click=click_draw_valleys, title="Revelar vales") { "󰽅 " } }
+                    view! { cx, button(on:click=click_draw_valleys, title="Revelar vales/picos") { "󰽅 " } }
                 })
 
                 (if props.trace.active {
@@ -286,8 +286,8 @@ fn GlobalTraceButtons<'a, G: Html>(cx: Scope<'a>, props: GlobalTraceButtons<'a>)
         div(class="global-buttons back") {
             button(on:click=click_hide_all_traces, title="Esconder todos os traços") { "󰈉 " }
             button(on:click=click_show_all_traces, title="Revelar todos os traços") { "󰈈 " }
-            button(on:click=click_hide_all_valleys, title="Esconder todos os vales") { "󰽅 " }
-            button(on:click=click_show_all_valleys, title="Revelar todos os vales") { "󰆤 " }
+            button(on:click=click_hide_all_valleys, title="Esconder todos os vales/picos") { "󰽅 " }
+            button(on:click=click_show_all_valleys, title="Revelar todos os vales/picos") { "󰆤 " }
             button(on:click=click_hide_all_means, title="Esconder todas as médias") { "󰍑 " }
             button(on:click=click_show_all_means, title="Revelar todas as médias") { "󰍐 " }
             button(on:click=click_save_all_spectra, title="Salvar todos os traços") { " " }
@@ -391,57 +391,78 @@ extern "C" {
     fn blur();
 }
 
-async fn get_old_handler_config<'a>(
-    wl_min: &Signal<String>,
-    wl_max: &Signal<String>,
-    pwr_min: &Signal<String>,
-    pwr_max: &Signal<String>,
-    prominence: &Signal<String>,
-    valley_detection: &Signal<String>,
-    acquisitor: &Signal<String>,
-) -> HandlerConfig {
+struct OldHandlerSignals<'a> {
+    wl_min: &'a Signal<String>,
+    wl_max: &'a Signal<String>,
+    pwr_min: &'a Signal<String>,
+    pwr_max: &'a Signal<String>,
+    valley_prominence: &'a Signal<String>,
+    valley_detection: &'a Signal<String>,
+    peak_prominence: &'a Signal<String>,
+    peak_detection: &'a Signal<String>,
+    acquisitor: &'a Signal<String>,
+}
+
+async fn get_old_handler_config(signals: OldHandlerSignals<'_>) -> HandlerConfig {
     // Also updates on every field
     let _config = get_handler_config().await;
 
     if let Some(wl_limits) = _config.wavelength_limits {
         // Update wl limits input
-        wl_min.set(format!("{:.1}", wl_limits.0 * 1e9));
-        wl_max.set(format!("{:.1}", wl_limits.1 * 1e9));
+        signals.wl_min.set(format!("{:.1}", wl_limits.0 * 1e9));
+        signals.wl_max.set(format!("{:.1}", wl_limits.1 * 1e9));
     } else {
-        wl_min.set("".to_string());
-        wl_max.set("".to_string());
+        signals.wl_min.set("".to_string());
+        signals.wl_max.set("".to_string());
     }
 
     if let Some(pwr_limits) = _config.power_limits {
         // Update pwr limits input
-        pwr_min.set(format!("{:.2}", pwr_limits.0));
-        pwr_max.set(format!("{:.2}", pwr_limits.1));
+        signals.pwr_min.set(format!("{:.2}", pwr_limits.0));
+        signals.pwr_max.set(format!("{:.2}", pwr_limits.1));
     } else {
-        pwr_min.set("".to_string());
-        pwr_max.set("".to_string());
+        signals.pwr_min.set("".to_string());
+        signals.pwr_max.set("".to_string());
     }
 
     match _config.acquisitor {
-        AcquisitorSimple::FileReader => acquisitor.set("file_reader".to_string()),
-        AcquisitorSimple::Imon => acquisitor.set("imon".to_string()),
+        AcquisitorSimple::FileReader => signals.acquisitor.set("file_reader".to_string()),
+        AcquisitorSimple::Imon => signals.acquisitor.set("imon".to_string()),
     }
 
-    let _prominence = match _config.valley_detection {
-        ValleyDetection::None => {
-            valley_detection.set("none".to_string());
+    let prominence = match _config.valley_detection {
+        CriticalDetection::None => {
+            signals.valley_detection.set("none".to_string());
             3.0
         }
-        ValleyDetection::Simple { prominence } => {
-            valley_detection.set("simple".to_string());
+        CriticalDetection::Simple { prominence } => {
+            signals.valley_detection.set("simple".to_string());
             prominence
         }
-        ValleyDetection::Lorentz { prominence } => {
-            valley_detection.set("lorentz".to_string());
+        CriticalDetection::Lorentz { prominence } => {
+            signals.valley_detection.set("lorentz".to_string());
             prominence
         }
     };
 
-    prominence.set(_prominence.to_string());
+    signals.valley_prominence.set(prominence.to_string());
+
+    let prominence = match _config.peak_detection {
+        CriticalDetection::None => {
+            signals.peak_detection.set("none".to_string());
+            3.0
+        }
+        CriticalDetection::Simple { prominence } => {
+            signals.peak_detection.set("simple".to_string());
+            prominence
+        }
+        CriticalDetection::Lorentz { prominence } => {
+            signals.peak_detection.set("lorentz".to_string());
+            prominence
+        }
+    };
+
+    signals.peak_prominence.set(prominence.to_string());
 
     _config
 }
@@ -460,22 +481,28 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
     let pwr_min = create_signal(cx, String::new());
     let pwr_max = create_signal(cx, String::new());
 
-    let prominence = create_signal(cx, String::new());
+    let valley_prominence = create_signal(cx, String::new());
     let valley_detection = create_signal(cx, String::new());
+
+    let peak_prominence = create_signal(cx, String::new());
+    let peak_detection = create_signal(cx, String::new());
 
     let acquisitor = create_signal(cx, String::new());
 
     spawn_local_scoped(cx, async move {
-        let _config = get_old_handler_config(
+        let old_handler_signals = OldHandlerSignals {
             wl_min,
             wl_max,
             pwr_min,
             pwr_max,
-            prominence,
+            valley_prominence,
             valley_detection,
+            peak_prominence,
+            peak_detection,
             acquisitor,
-        )
-        .await;
+        };
+
+        let _config = get_old_handler_config(old_handler_signals).await;
         props.config.set(_config); // Update whole config
     });
 
@@ -513,22 +540,44 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
 
     let valley_detection_select = move |_| {
         blur();
-        let prominence_result = prominence.get().parse::<f64>();
+        let prominence_result = valley_prominence.get().parse::<f64>();
         match prominence_result {
             Ok(prominence) => match (*valley_detection.get()).as_str() {
-                "none" => (props.config.modify()).valley_detection = ValleyDetection::None,
+                "none" => (props.config.modify()).valley_detection = CriticalDetection::None,
                 "simple" => {
                     (props.config.modify()).valley_detection =
-                        ValleyDetection::Simple { prominence }
+                        CriticalDetection::Simple { prominence }
                 }
                 "lorentz" => {
                     (props.config.modify()).valley_detection =
-                        ValleyDetection::Lorentz { prominence }
+                        CriticalDetection::Lorentz { prominence }
                 }
                 _ => (),
             },
             Err(_) => {
-                prominence.set("3".to_string());
+                valley_prominence.set("3".to_string());
+            }
+        }
+    };
+
+    let peak_detection_select = move |_| {
+        blur();
+        let prominence_result = peak_prominence.get().parse::<f64>();
+        match prominence_result {
+            Ok(prominence) => match (*peak_detection.get()).as_str() {
+                "none" => (props.config.modify()).peak_detection = CriticalDetection::None,
+                "simple" => {
+                    (props.config.modify()).peak_detection =
+                        CriticalDetection::Simple { prominence }
+                }
+                "lorentz" => {
+                    (props.config.modify()).peak_detection =
+                        CriticalDetection::Lorentz { prominence }
+                }
+                _ => (),
+            },
+            Err(_) => {
+                peak_prominence.set("3".to_string());
             }
         }
     };
@@ -547,16 +596,20 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
         props.limits_change_flag.track();
         spawn_local_scoped(cx, async move {
             if *props.limits_change_flag.get() {
-                let _config = get_old_handler_config(
+                let old_handler_signals = OldHandlerSignals {
                     wl_min,
                     wl_max,
                     pwr_min,
                     pwr_max,
-                    prominence,
+                    valley_prominence,
                     valley_detection,
+                    peak_prominence,
+                    peak_detection,
                     acquisitor,
-                )
-                .await;
+                };
+
+                let _config = get_old_handler_config(old_handler_signals).await;
+
                 props.config.set(_config); // Update whole config on zoom
                 props.limits_change_flag.set(false);
             }
@@ -628,11 +681,36 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
                 p { "Proeminência mínima:"}
                 p {
                     input(
-                        bind:value=prominence,
-                        on:input=|_| check_number_input(prominence),
+                        bind:value=valley_prominence,
+                        on:input=|_| check_number_input(valley_prominence),
                         on:focusout=valley_detection_select
                     ) {}
-                    "(dB)"
+                    "(dB) (vale)"
+                }
+            }
+
+            div(class="element") {
+                p { "Detecção de pico:" }
+                select(
+                    name="peak_detection",
+                    bind:value=peak_detection,
+                    on:input=peak_detection_select
+                ) {
+                    option(value="none") { "Nenhuma" }
+                    option(value="simple") { "Simples" }
+                    option(value="lorentz") { "Lorentziana" }
+                }
+            }
+
+            div(class="element") {
+                p { "Proeminência mínima:"}
+                p {
+                    input(
+                        bind:value=peak_prominence,
+                        on:input=|_| check_number_input(peak_prominence),
+                        on:focusout=peak_detection_select
+                    ) {}
+                    "(dB) (pico)"
                 }
             }
 

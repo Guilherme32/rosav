@@ -42,12 +42,14 @@ async fn get_trace_info() -> TraceInfo {
     let wavelength_limits = get_wavelength_limits().await;
     let power_limits = get_power_limits().await;
     let valley_detection = get_valley_detection().await;
+    let peak_detection = get_peak_detection().await;
 
     TraceInfo {
         svg_size,
         wavelength_limits,
         power_limits,
         valley_detection,
+        peak_detection,
     }
 }
 
@@ -75,11 +77,13 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
                 // Get the latest spectrum if it is available
                 let new_path = get_last_spectrum_path().await;
                 let new_valleys = get_last_spectrum_valleys_points().await;
+                let new_peaks = get_last_spectrum_peaks_points().await;
 
                 if let Some(trace) = traces.modify().last_mut() {
                     trace.drawn_info = current_info.clone();
                     trace.svg_path = new_path;
                     trace.valleys = new_valleys;
+                    trace.peaks = new_peaks;
                 };
             }
         }
@@ -103,9 +107,10 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
                     if trace.active {
                         trace.svg_path = get_last_spectrum_path().await;
                         trace.valleys = get_last_spectrum_valleys_points().await;
+                        trace.peaks = get_last_spectrum_peaks_points().await;
                     } else {
                         trace.svg_path = get_frozen_spectrum_path(id).await;
-                        trace.valleys = get_frozen_spectrum_valleys_points(id).await;
+                        trace.peaks = get_frozen_spectrum_peaks_points(id).await;
                     }
                 }
             }

@@ -269,13 +269,21 @@ pub fn Graph<'a, G: Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
 
 fn draw_trace<G: Html>(cx: Scope, trace: Trace) -> View<G> {
     let valleys_markers = trace.render_valleys_markers(cx);
+    let peaks_markers = trace.render_peaks_markers(cx);
+
     let valleys_mean_marker = trace.render_valleys_mean_marker(cx);
+    let peaks_mean_marker = trace.render_peaks_mean_marker(cx);
+
     let trace_line = trace.render_spectrum(cx);
 
     view! { cx,
         (trace_line)
+
         (valleys_markers)
+        (peaks_markers)
+
         (valleys_mean_marker)
+        (peaks_mean_marker)
     }
 }
 

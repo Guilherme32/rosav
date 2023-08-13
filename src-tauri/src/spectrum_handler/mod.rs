@@ -29,7 +29,8 @@ pub struct HandlerConfig {
     pub wavelength_limits: Option<(f64, f64)>,
     pub power_limits: Option<(f64, f64)>,
     pub acquisitor: AcquisitorSimple,
-    pub valley_detection: ValleyDetection,
+    pub valley_detection: CriticalDetection,
+    pub peak_detection: CriticalDetection,
 }
 
 #[derive(Debug)]
@@ -157,6 +158,25 @@ impl SpectrumHandler {
         }
     }
 
+    pub fn get_last_spectrum_peaks_points(
+        &self,
+        svg_limits: (u32, u32),
+    ) -> Option<Vec<(f64, f64)>> {
+        let max_power = self.get_max_power();
+        let mut spectrum = self.last_spectrum.lock().unwrap();
+        let config = self.config.lock().unwrap();
+        let method = config.peak_detection.clone();
+        drop(config); // Get_limits will also ask for it, making a *deadlock*
+
+        if let Some(spectrum_limits) = self.get_limits(max_power) {
+            (*spectrum)
+                .as_mut()
+                .map(|spectrum| spectrum.get_peaks_points(svg_limits, &spectrum_limits, method))
+        } else {
+            None
+        }
+    }
+
     pub fn update_limits(&self) {
         let active_spectrum = self.last_spectrum.lock().unwrap();
         let frozen_spectra = self.frozen_spectra.lock().unwrap();
@@ -217,9 +237,14 @@ impl SpectrumHandler {
             .fold(f64::NEG_INFINITY, |acc, new| acc.max(new))
     }
 
-    pub fn get_valley_detection(&self) -> ValleyDetection {
+    pub fn get_valley_detection(&self) -> CriticalDetection {
         let config = self.config.lock().unwrap();
         config.valley_detection.clone()
+    }
+
+    pub fn get_peak_detection(&self) -> CriticalDetection {
+        let config = self.config.lock().unwrap();
+        config.peak_detection.clone()
     }
 }
 
@@ -302,6 +327,32 @@ impl SpectrumHandler {
         self.get_limits(max_power).map(|spectrum_limits| {
             spectrum.get_valleys_points(svg_limits, &spectrum_limits, method)
         })
+    }
+
+    pub fn get_frozen_spectrum_peaks_points(
+        &self,
+        id: usize,
+        svg_limits: (u32, u32),
+    ) -> Option<Vec<(f64, f64)>> {
+        let max_power = self.get_max_power();
+        let mut frozen_list = self.frozen_spectra.lock().unwrap();
+        let config = self.config.lock().unwrap();
+        let method = config.peak_detection.clone();
+        drop(config); // Get_limits will also ask for it, making a *deadlock*
+
+        if id >= frozen_list.len() {
+            self.log_error(
+                "[FGF] Não foi possível pegar o espectro congelado, \
+                id fora dos limites"
+                    .to_string(),
+            );
+            return None;
+        }
+
+        let spectrum = &mut frozen_list[id];
+
+        self.get_limits(max_power)
+            .map(|spectrum_limits| spectrum.get_peaks_points(svg_limits, &spectrum_limits, method))
     }
 
     pub fn get_frozen_length(&self) -> usize {
@@ -396,7 +447,8 @@ pub fn default_config() -> HandlerConfig {
         wavelength_limits: None,
         power_limits: None,
         acquisitor: AcquisitorSimple::FileReader,
-        valley_detection: ValleyDetection::Lorentz { prominence: 3.0 },
+        valley_detection: CriticalDetection::Lorentz { prominence: 3.0 },
+        peak_detection: CriticalDetection::None,
     }
 }
 

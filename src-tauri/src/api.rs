@@ -5,7 +5,7 @@ use std::sync::{atomic, mpsc, Mutex};
 use tauri::api::dialog::{blocking, FileDialogBuilder};
 
 use crate::*;
-use spectrum::ValleyDetection;
+use spectrum::CriticalDetection;
 use spectrum_handler::{AcquisitorConfig, HandlerConfig, SpectrumHandler, State as HandlerState};
 
 use config::{write_acquisitor_config, write_handler_config};
@@ -62,8 +62,13 @@ pub fn get_time() -> String {
 }
 
 #[tauri::command]
-pub fn get_valley_detection(handler: tauri::State<SpectrumHandler>) -> ValleyDetection {
+pub fn get_valley_detection(handler: tauri::State<SpectrumHandler>) -> CriticalDetection {
     handler.get_valley_detection()
+}
+
+#[tauri::command]
+pub fn get_peak_detection(handler: tauri::State<SpectrumHandler>) -> CriticalDetection {
+    handler.get_peak_detection()
 }
 
 // Region: Graph / Plot / Spectrum related -------------------------------------
@@ -155,6 +160,15 @@ pub async fn get_last_spectrum_valleys_points(
 }
 
 #[tauri::command]
+pub async fn get_last_spectrum_peaks_points(
+    handler: tauri::State<'_, SpectrumHandler>,
+    window: tauri::Window,
+) -> Result<Vec<(f64, f64)>, ()> {
+    let points = handler.get_last_spectrum_peaks_points(get_svg_size(window));
+    Ok(points.unwrap_or(vec![]))
+}
+
+#[tauri::command]
 pub fn save_continuous(save: bool, handler: tauri::State<SpectrumHandler>) {
     handler.saving_new.store(save, atomic::Ordering::Relaxed);
 }
@@ -199,6 +213,16 @@ pub async fn get_frozen_spectrum_valleys_points(
 }
 
 #[tauri::command]
+pub async fn get_frozen_spectrum_peaks_points(
+    id: usize,
+    handler: tauri::State<'_, SpectrumHandler>,
+    window: tauri::Window,
+) -> Result<Vec<(f64, f64)>, ()> {
+    let points = handler.get_frozen_spectrum_peaks_points(id, get_svg_size(window));
+    Ok(points.unwrap_or(vec![]))
+}
+
+#[tauri::command]
 pub fn save_frozen_spectrum(
     id: usize,
     handler: tauri::State<SpectrumHandler>,
@@ -232,7 +256,6 @@ pub async fn save_all_spectra(
     handler: tauri::State<'_, SpectrumHandler>,
     window: tauri::Window,
 ) -> Result<(), ()> {
-    println!("Saving all spectra!!!");
     let folder_path = blocking::FileDialogBuilder::new()
         .set_parent(&window)
         .pick_folder();

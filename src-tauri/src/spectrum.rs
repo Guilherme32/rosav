@@ -34,8 +34,9 @@ pub struct Info {
     pub name: Option<String>,
     pub save_time: String,
     pub valleys: Option<Vec<SpectrumValue>>,
-    pub valley_detection: ValleyDetection,
+    pub valley_detection: CriticalDetection,
     pub peaks: Option<Vec<SpectrumValue>>,
+    pub peak_detection: CriticalDetection,
 }
 
 #[derive(Debug, Clone)]
@@ -46,7 +47,7 @@ pub struct Limits {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(tag = "type")]
-pub enum ValleyDetection {
+pub enum CriticalDetection {
     None,
     Simple { prominence: f64 },
     Lorentz { prominence: f64 },
@@ -60,8 +61,9 @@ impl Info {
             name: None,
             save_time,
             valleys: None,
-            valley_detection: ValleyDetection::None,
+            valley_detection: CriticalDetection::None,
             peaks: None,
+            peak_detection: CriticalDetection::None,
         }
     }
 }
@@ -257,38 +259,63 @@ impl Spectrum {
 }
 
 impl Spectrum {
-    pub fn get_valleys(&mut self, method: ValleyDetection) -> Option<&Vec<SpectrumValue>> {
+    pub fn get_valleys(&mut self, method: CriticalDetection) -> Option<&Vec<SpectrumValue>> {
         match method {
-            ValleyDetection::None => None,
-            ValleyDetection::Simple { prominence } => Some(self.get_valleys_simple(prominence)),
-            ValleyDetection::Lorentz { prominence } => Some(self.get_valleys_lorentz(prominence)),
+            CriticalDetection::None => None,
+            CriticalDetection::Simple { prominence } => {
+                Some(self.get_peaks_simple(prominence, true))
+            }
+            CriticalDetection::Lorentz { prominence } => {
+                Some(self.get_peaks_lorentz(prominence, true))
+            }
         }
     }
 
-    pub fn get_valleys_simple(&mut self, prominence: f64) -> &Vec<SpectrumValue> {
+    pub fn get_peaks(&mut self, method: CriticalDetection) -> Option<&Vec<SpectrumValue>> {
+        match method {
+            CriticalDetection::None => None,
+            CriticalDetection::Simple { prominence } => {
+                Some(self.get_peaks_simple(prominence, false))
+            }
+            CriticalDetection::Lorentz { prominence } => {
+                Some(self.get_peaks_lorentz(prominence, false))
+            }
+        }
+    }
+
+    pub fn get_peaks_simple(&mut self, prominence: f64, invert: bool) -> &Vec<SpectrumValue> {
+        let signal = if invert { -1.0 } else { 1.0 };
         let powers: Vec<f64> = self
             .values
             .iter()
-            .map(|spectrum_value| -spectrum_value.power)
+            .map(|spectrum_value| signal * spectrum_value.power)
             .collect();
 
         let mut peak_finder = PeakFinder::new(&powers);
         peak_finder.with_min_prominence(prominence);
 
-        let valleys: Vec<SpectrumValue> = peak_finder
+        let peaks: Vec<SpectrumValue> = peak_finder
             .find_peaks()
             .iter()
             .map(|peak| self.values[peak.middle_position()].clone())
             .collect();
 
-        self.info.valleys = Some(valleys);
-        self.info.valley_detection = ValleyDetection::Simple { prominence };
+        if invert {
+            self.info.valleys = Some(peaks);
+            self.info.valley_detection = CriticalDetection::Simple { prominence };
 
-        // Can unwrap, just put it in a Some
-        (self.info.valleys.as_ref()).unwrap()
+            // Can unwrap, just put it in a Some
+            (self.info.valleys.as_ref()).unwrap()
+        } else {
+            self.info.peaks = Some(peaks);
+            self.info.peak_detection = CriticalDetection::Simple { prominence };
+
+            // Can unwrap, just put it in a Some
+            (self.info.peaks.as_ref()).unwrap()
+        }
     }
 
-    pub fn get_valley_range(&self, peak: &find_peaks::Peak<f64>) -> Range<usize> {
+    pub fn get_fwhm_range(&self, peak: &find_peaks::Peak<f64>) -> Range<usize> {
         let mut left = peak.middle_position();
         let mut right = left;
 
@@ -311,39 +338,51 @@ impl Spectrum {
         left..right
     }
 
-    pub fn get_valleys_lorentz(&mut self, prominence: f64) -> &Vec<SpectrumValue> {
+    pub fn get_peaks_lorentz(&mut self, prominence: f64, invert: bool) -> &Vec<SpectrumValue> {
+        let signal = if invert { -1.0 } else { 1.0 };
         let powers: Vec<f64> = self
             .values
             .iter()
-            .map(|spectrum_value| -spectrum_value.power)
+            .map(|spectrum_value| signal * spectrum_value.power)
             .collect();
 
         let mut peak_finder = PeakFinder::new(&powers);
         peak_finder.with_min_prominence(prominence);
 
-        let valleys: Option<Vec<SpectrumValue>> = peak_finder
+        let peaks: Option<Vec<SpectrumValue>> = peak_finder
             .find_peaks()
             .iter()
-            .map(|peak| self.get_valley_range(peak))
+            .map(|peak| self.get_fwhm_range(peak))
             .map(|peak| approximate_lorentz(&self.values[peak]))
             .filter(|valley| valley.is_some())
             .collect();
 
-        self.info.valleys = valleys;
-        self.info.valley_detection = ValleyDetection::Lorentz { prominence };
-        if self.info.valleys.is_none() {
-            self.info.valleys = Some(vec![]);
-        }
+        if invert {
+            self.info.valleys = peaks;
+            self.info.valley_detection = CriticalDetection::Lorentz { prominence };
+            if self.info.valleys.is_none() {
+                self.info.valleys = Some(vec![]);
+            }
 
-        // Can unwrap, just put it in a Some
-        (self.info.valleys.as_ref()).unwrap()
+            // Can unwrap, just put it in a Some
+            (self.info.valleys.as_ref()).unwrap()
+        } else {
+            self.info.peaks = peaks;
+            self.info.peak_detection = CriticalDetection::Lorentz { prominence };
+            if self.info.peaks.is_none() {
+                self.info.peaks = Some(vec![]);
+            }
+
+            // Can unwrap, just put it in a Some
+            (self.info.peaks.as_ref()).unwrap()
+        }
     }
 
     pub fn get_valleys_points(
         &mut self,
         svg_limits: (u32, u32),
         graph_limits: &Limits,
-        method: ValleyDetection,
+        method: CriticalDetection,
     ) -> Vec<(f64, f64)> {
         let svg_limits = (svg_limits.0 as f64 - 40.0, svg_limits.1 as f64 - 16.6);
 
@@ -358,6 +397,30 @@ impl Spectrum {
                 valleys
                     .iter()
                     .map(|valley| convert_point(graph_limits, &svg_limits, valley))
+                    .collect()
+            })
+            .unwrap_or(vec![])
+    }
+
+    pub fn get_peaks_points(
+        &mut self,
+        svg_limits: (u32, u32),
+        graph_limits: &Limits,
+        method: CriticalDetection,
+    ) -> Vec<(f64, f64)> {
+        let svg_limits = (svg_limits.0 as f64 - 40.0, svg_limits.1 as f64 - 16.6);
+
+        let peaks_option = if method == self.info.peak_detection {
+            self.info.peaks.as_ref()
+        } else {
+            self.get_peaks(method)
+        };
+
+        peaks_option
+            .map(|peaks| {
+                peaks
+                    .iter()
+                    .map(|peak| convert_point(graph_limits, &svg_limits, peak))
                     .collect()
             })
             .unwrap_or(vec![])
@@ -386,6 +449,10 @@ pub fn approximate_lorentz(values: &[SpectrumValue]) -> Option<SpectrumValue> {
     let x = DVector::from(x);
     let y: Vec<f64> = values.iter().map(|value| value.power).collect();
     let y = DVector::from(y);
+
+    if x.is_empty() {
+        return None;
+    }
 
     let guess_x_0 = (x[x.len() - 1] + x[0]) / 2.0; // Rough center
     let guess_gamma = (x[x.len() - 1] - x[0]) / 2.0; // Rough 1/2 FWHM (FWHM = 2 gamma)

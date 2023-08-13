@@ -1,13 +1,14 @@
 use sycamore::prelude::*;
 
-use crate::api::ValleyDetection;
+use crate::api::CriticalDetection;
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct TraceInfo {
     pub wavelength_limits: (f64, f64),
     pub power_limits: (f64, f64),
     pub svg_size: (i32, i32),
-    pub valley_detection: ValleyDetection,
+    pub valley_detection: CriticalDetection,
+    pub peak_detection: CriticalDetection,
 }
 
 fn empty_trace_info() -> TraceInfo {
@@ -15,7 +16,8 @@ fn empty_trace_info() -> TraceInfo {
         wavelength_limits: (0.0, 0.0),
         power_limits: (0.0, 0.0),
         svg_size: (0, 0),
-        valley_detection: ValleyDetection::None,
+        valley_detection: CriticalDetection::None,
+        peak_detection: CriticalDetection::None,
     }
 }
 
@@ -28,6 +30,7 @@ pub struct Trace {
     pub color_id: Option<u8>,
     pub active: bool,
     pub valleys: Vec<(f64, f64)>,
+    pub peaks: Vec<(f64, f64)>,
     pub svg_path: String,
     pub freeze_time: Option<String>, // Se None não está congelado
     pub drawn_info: TraceInfo,       // Stuff to check if it needs to be redrawn
@@ -42,6 +45,7 @@ pub fn new_trace(id: u8, visible: bool, draw_valleys: bool, draw_valleys_mean: b
         color_id: None,
         active: true,
         valleys: vec![],
+        peaks: vec![],
         svg_path: String::new(),
         freeze_time: None,
         drawn_info: empty_trace_info(),
@@ -107,6 +111,20 @@ impl Trace {
         let len = self.valleys.len();
         Some((sum.0 / (len as f64), sum.1 / (len as f64)))
     }
+
+    pub fn peaks_mean(&self) -> Option<(f64, f64)> {
+        if self.peaks.len() < 2 {
+            return None;
+        }
+
+        let sum = self
+            .peaks
+            .iter()
+            .fold((0.0, 0.0), |acc, new| (acc.0 + new.0, acc.1 + new.1));
+
+        let len = self.peaks.len();
+        Some((sum.0 / (len as f64), sum.1 / (len as f64)))
+    }
 }
 
 // Drawing implementations
@@ -166,6 +184,43 @@ impl Trace {
         }
     }
 
+    pub fn render_peaks_markers<G: Html>(&self, cx: Scope) -> View<G> {
+        let color = self.get_color();
+
+        if self.draw_valleys {
+            View::new_fragment(
+                self.peaks
+                    .iter()
+                    .map(|&peak| {
+                        let color = color.clone();
+                        view! { cx,
+                            circle(
+                                cx=peak.0,
+                                cy=peak.1,
+                                r="6",
+                                stroke-width="2",
+                                stroke="#16161D",
+                                fill=color,
+                                clip-path="url(#graph-clip)"
+                            ) {}
+                            line(
+                                x1=(peak.0 + 0.707 * 3.0), // 3.0*sqrt(2) to get the same length
+                                x2=(peak.0 - 0.707 * 3.0),
+                                y1=(peak.1 + 0.707 * 3.0),
+                                y2=(peak.1 - 0.707 * 3.0),
+                                stroke-width="2",
+                                stroke="#16161D",
+                                clip-path="url(#graph-clip)"
+                            ) {}
+                        }
+                    })
+                    .collect(),
+            )
+        } else {
+            view! { cx, "" }
+        }
+    }
+
     pub fn render_valleys_mean_marker<G: Html>(&self, cx: Scope) -> View<G> {
         let color = self.get_color();
         if self.draw_valleys_mean {
@@ -194,6 +249,47 @@ impl Trace {
                         x2=(valleys_mean.0 - 3.0),
                         y1=valleys_mean.1,
                         y2=valleys_mean.1,
+                        stroke-width="2",
+                        stroke="#16161D",
+                        clip-path="url(#graph-clip)"
+                    ) {}
+                }
+            } else {
+                view! { cx, "" }
+            }
+        } else {
+            view! { cx, "" }
+        }
+    }
+
+    pub fn render_peaks_mean_marker<G: Html>(&self, cx: Scope) -> View<G> {
+        let color = self.get_color();
+        if self.draw_valleys_mean {
+            if let Some(peaks_mean) = self.peaks_mean() {
+                view! { cx,
+                    circle(
+                        cx=peaks_mean.0,
+                        cy=peaks_mean.1,
+                        r="6",
+                        stroke-width="2",
+                        stroke="#16161D",
+                        fill=color,
+                        clip-path="url(#graph-clip)"
+                    ) {}
+                    line(
+                        x1=(peaks_mean.0 - 0.707 * 3.0), // 3.0*sqrt(2) to get the same length
+                        x2=(peaks_mean.0 + 0.707 * 3.0),
+                        y1=(peaks_mean.1 + 0.707 * 3.0),
+                        y2=(peaks_mean.1 - 0.707 * 3.0),
+                        stroke-width="2",
+                        stroke="#16161D",
+                        clip-path="url(#graph-clip)"
+                    ) {}
+                    line(
+                        x1=(peaks_mean.0 + 0.707 * 3.0), // 3.0*sqrt(2) to get the same length
+                        x2=(peaks_mean.0 - 0.707 * 3.0),
+                        y1=(peaks_mean.1 + 0.707 * 3.0),
+                        y2=(peaks_mean.1 - 0.707 * 3.0),
                         stroke-width="2",
                         stroke="#16161D",
                         clip-path="url(#graph-clip)"
