@@ -276,16 +276,21 @@ fn GlobalTraceButtons<'a, G: Html>(cx: Scope<'a>, props: GlobalTraceButtons<'a>)
             show_all_means(props.traces).await;
         })
     };
+    let click_save_all_spectra = move |_| {
+        spawn_local_scoped(cx, async move {
+            save_all_spectra().await;
+        })
+    };
 
     view! { cx,
-        div(class="global-buttons") {
+        div(class="global-buttons back") {
             button(on:click=click_hide_all_traces, title="Esconder todos os traços") { "󰈉 " }
             button(on:click=click_show_all_traces, title="Revelar todos os traços") { "󰈈 " }
             button(on:click=click_hide_all_valleys, title="Esconder todos os vales") { "󰽅 " }
             button(on:click=click_show_all_valleys, title="Revelar todos os vales") { "󰆤 " }
             button(on:click=click_hide_all_means, title="Esconder todas as médias") { "󰍑 " }
             button(on:click=click_show_all_means, title="Revelar todas as médias") { "󰍐 " }
-            button(title="Salvar todos os traços") { " " }
+            button(on:click=click_save_all_spectra, title="Salvar todos os traços") { " " }
         }
     }
 }

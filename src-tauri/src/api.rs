@@ -1,4 +1,5 @@
 use chrono::prelude::*;
+use std::fs::create_dir;
 use std::path::PathBuf;
 use std::sync::{atomic, mpsc, Mutex};
 use tauri::api::dialog::{blocking, FileDialogBuilder};
@@ -214,15 +215,59 @@ pub fn save_frozen_spectrum(
             .save_file(move |path| {
                 if let Some(path) = path {
                     return match spectrum.save(&path) {
-                        Ok(_) => log_info(&log_tx, format!("[MSF] Espectro {} salvo", id)),
+                        Ok(_) => log_info(&log_tx, format!("[ASF] Espectro {} salvo", id)),
                         Err(error) => log_error(
                             &log_tx,
-                            format!("[MSF] falha ao salvar espectro {} ({})", id, error),
+                            format!("[ASF] falha ao salvar espectro {} ({})", id, error),
                         ),
                     };
                 }
             });
     }
+}
+
+// NOTE change here
+#[tauri::command]
+pub async fn save_all_spectra(
+    handler: tauri::State<'_, SpectrumHandler>,
+    window: tauri::Window,
+) -> Result<(), ()> {
+    println!("Saving all spectra!!!");
+    let folder_path = blocking::FileDialogBuilder::new()
+        .set_parent(&window)
+        .pick_folder();
+
+    if let Some(folder_path) = folder_path {
+        let time = Local::now().format("%Y%m%d-%H%M%S").to_string();
+        let folder_path = folder_path.join(time);
+        let folder_path_copy = folder_path.clone();
+        if let Err(error) = create_dir(folder_path_copy) {
+            handler.log_error(format!(
+                "[ASA] Não foi possível salvar os espectros ({})",
+                error
+            ));
+            return Err(());
+        }
+
+        // let info = vec![];
+        for id in 0..handler.get_frozen_length() {
+            let file_path = folder_path.join(format!("spectrum{:03}.txt", id));
+            handler.save_frozen(id, &file_path);
+        }
+
+        let info_file_path = folder_path.join("spectra_info.json");
+        if let Err(error) = handler.save_all_frozen_info(&info_file_path) {
+            handler.log_error(format!(
+                "[ASA] Não foi possível salvar as informações dos espectros ({})",
+                error
+            ));
+            return Err(());
+        } else {
+            handler.log_info("[ASA] Info dos espectros salva".to_string());
+        }
+    }
+
+    Ok(())
 }
 
 // Region: Acquisitor functions ------------------------------------------------

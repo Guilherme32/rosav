@@ -29,7 +29,7 @@ pub struct Spectrum {
     pub info: Info,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Info {
     pub name: Option<String>,
     pub save_time: String,

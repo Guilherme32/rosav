@@ -1,6 +1,8 @@
 use crate::{log_error, log_info, log_war, Log};
 
 use std::error::Error;
+use std::fs::File;
+use std::io::prelude::*;
 use std::path::Path;
 
 use std::sync::atomic::{self, AtomicBool};
@@ -302,6 +304,11 @@ impl SpectrumHandler {
         })
     }
 
+    pub fn get_frozen_length(&self) -> usize {
+        let frozen_list = self.frozen_spectra.lock().unwrap();
+        frozen_list.len()
+    }
+
     pub fn clone_frozen(&self, id: usize) -> Option<Spectrum> {
         let frozen_list = self.frozen_spectra.lock().unwrap();
 
@@ -340,6 +347,28 @@ impl SpectrumHandler {
                 id, error
             )),
         }
+    }
+
+    pub fn save_all_frozen_info(&self, path: &Path) -> Result<(), Box<dyn Error>> {
+        let frozen_list = self.frozen_spectra.lock().unwrap();
+
+        let infos: Vec<Info> = frozen_list
+            .iter()
+            .map(|spectrum| spectrum.info.clone())
+            .enumerate()
+            .map(|(id, mut info)| {
+                if info.name.is_none() {
+                    info.name = Some(format!("spectrum{:03}", id));
+                }
+                info
+            })
+            .collect();
+
+        let infos_str = serde_json::to_string(&infos)?;
+        let mut file = File::create(path)?;
+        file.write_all(infos_str.as_bytes())?;
+
+        Ok(())
     }
 }
 

@@ -51,6 +51,7 @@ fn main() {
             get_frozen_spectrum_path,
             get_frozen_spectrum_valleys_points,
             save_frozen_spectrum,
+            save_all_spectra,
             save_continuous,
             get_saving,
             get_connection_state,

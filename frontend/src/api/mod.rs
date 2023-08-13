@@ -206,6 +206,10 @@ pub async fn save_frozen_spectrum(id: usize) {
     invoke("save_frozen_spectrum", to_value(&IdArgs { id }).unwrap()).await;
 }
 
+pub async fn save_all_spectra() {
+    invoke("save_all_spectra", to_value(&()).unwrap()).await;
+}
+
 #[derive(Serialize, Deserialize)]
 struct SaveContinuousArgs {
     save: bool,
