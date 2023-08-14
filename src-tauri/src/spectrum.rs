@@ -315,21 +315,23 @@ impl Spectrum {
         }
     }
 
-    pub fn get_fwhm_range(&self, peak: &find_peaks::Peak<f64>) -> Range<usize> {
+    pub fn get_peak_range(&self, peak: &find_peaks::Peak<f64>, invert: bool) -> Range<usize> {
         let mut left = peak.middle_position();
         let mut right = left;
 
-        let valley_pwr = self.values[peak.middle_position()].power;
+        let signal = if invert { -1.0 } else { 1.0 };
+
+        let peak_pwr = signal * self.values[peak.middle_position()].power;
         let prominence = peak.prominence.unwrap_or(3.0);
 
         for i in (0..left).rev() {
-            if self.values[i].power >= valley_pwr + prominence / 2.0 {
+            if signal * self.values[i].power <= peak_pwr - prominence / 2.0 {
                 left = i;
                 break;
             }
         }
         for i in right..self.values.len() {
-            if self.values[i].power >= valley_pwr + prominence / 2.0 {
+            if signal * self.values[i].power <= peak_pwr - prominence / 2.0 {
                 right = i;
                 break;
             }
@@ -352,7 +354,7 @@ impl Spectrum {
         let peaks: Option<Vec<SpectrumValue>> = peak_finder
             .find_peaks()
             .iter()
-            .map(|peak| self.get_fwhm_range(peak))
+            .map(|peak| self.get_peak_range(peak, invert))
             .map(|peak| approximate_lorentz(&self.values[peak]))
             .filter(|valley| valley.is_some())
             .collect();

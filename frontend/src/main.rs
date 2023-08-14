@@ -110,6 +110,7 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
                         trace.peaks = get_last_spectrum_peaks_points().await;
                     } else {
                         trace.svg_path = get_frozen_spectrum_path(id).await;
+                        trace.valleys = get_frozen_spectrum_valleys_points(id).await;
                         trace.peaks = get_frozen_spectrum_peaks_points(id).await;
                     }
                 }
