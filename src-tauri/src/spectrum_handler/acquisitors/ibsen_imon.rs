@@ -31,6 +31,7 @@ use crate::spectrum_handler::{SpectrumHandler, State};
 pub struct ImonConfig {
     pub exposure_ms: f64,
     pub read_delay_ms: u64,
+    pub multisampling: u32,
 }
 
 #[derive(Debug)]
@@ -54,6 +55,7 @@ pub fn default_config() -> ImonConfig {
     ImonConfig {
         exposure_ms: 0.01,
         read_delay_ms: 100,
+        multisampling: 32,
     }
 }
 
@@ -392,8 +394,13 @@ fn parse_imon_parameters(
     if let Some(n_pixels) = n_pixels {
         sleep(Duration::from_millis(10));
 
-        let mut dark_pixels =
-            get_raw_pixel_readings_multisampled(&mut port, config, n_pixels, 10, 32)?;
+        let mut dark_pixels = get_raw_pixel_readings_multisampled(
+            &mut port,
+            config,
+            n_pixels,
+            10,
+            config.multisampling,
+        )?;
         if dark_pixels.len() != n_pixels as usize {
             return Err(Box::new(ImonError::ParseError));
         }
@@ -488,7 +495,7 @@ fn constant_read(args: ConstantReadArgs) {
                 &mut port,
                 &config,
                 10,
-                16,
+                config.multisampling,
                 args.n_pixels,
                 &args.coefficients,
                 &args.dark_pixels,

@@ -84,6 +84,7 @@ pub fn RenderImonConfig<G: Html>(cx: Scope) -> View<G> {
 
     let exposure = create_signal(cx, String::new());
     let read_delay = create_signal(cx, String::new());
+    let multisampling = create_signal(cx, String::new());
 
     spawn_local_scoped(cx, async move {
         // Get old config. Retries a few times
@@ -93,6 +94,7 @@ pub fn RenderImonConfig<G: Html>(cx: Scope) -> View<G> {
             if let AcquisitorConfig::ImonConfig(_config) = _config {
                 exposure.set(_config.exposure_ms.to_string());
                 read_delay.set(_config.read_delay_ms.to_string());
+                multisampling.set(_config.multisampling.to_string());
 
                 config.set(_config);
                 return;
@@ -126,6 +128,11 @@ pub fn RenderImonConfig<G: Html>(cx: Scope) -> View<G> {
             Ok(value) => config.read_delay_ms = value,
             Err(_) => read_delay.set(config.read_delay_ms.to_string()),
         }
+
+        match (*multisampling.get()).parse::<u32>() {
+            Ok(value) => config.multisampling = value,
+            Err(_) => multisampling.set(config.multisampling.to_string()),
+        }
     };
 
     view! { cx,
@@ -155,6 +162,15 @@ pub fn RenderImonConfig<G: Html>(cx: Scope) -> View<G> {
                     on:focusout=update_config
                 ) {}
                 "ms"
+            }
+
+            div(class="element") {
+                p { "multisampling: " }
+                input(
+                    bind:value=multisampling,
+                    type="number",
+                    on:focusout=update_config
+                ) {}
             }
         }
     }
