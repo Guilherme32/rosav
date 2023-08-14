@@ -162,7 +162,7 @@ impl Imon {
             }
         };
 
-        let connected_imon = match parse_imon_parameters(port, &config) {
+        let mut connected_imon = match parse_imon_parameters(port, &config) {
             Ok(parsed) => parsed,
             Err(err) => {
                 self.log_war(format!(
@@ -173,6 +173,14 @@ impl Imon {
                 return Err(err);
             }
         };
+
+        if connected_imon.dark_pixels.is_empty() {
+            self.log_war(
+                "[ICN] IMON conectado com fonte ligada. Ignorando compensação do espectro dark"
+                    .to_string(),
+            );
+            connected_imon.dark_pixels = vec![0; connected_imon.n_pixels as usize];
+        }
 
         *state = ImonState::Connected(connected_imon);
         self.log_info("[ICN] Aquisitor conectado".to_string());
@@ -384,17 +392,19 @@ fn parse_imon_parameters(
     if let Some(n_pixels) = n_pixels {
         sleep(Duration::from_millis(10));
 
-        let dark_pixels = get_raw_pixel_readings_multisampled(&mut port, config, n_pixels, 10, 32)?;
+        let mut dark_pixels =
+            get_raw_pixel_readings_multisampled(&mut port, config, n_pixels, 10, 32)?;
         if dark_pixels.len() != n_pixels as usize {
             return Err(Box::new(ImonError::ParseError));
         }
 
         // Unwrap explanation: Length checked above
+        // This variety indicates an active light source
         if dark_pixels.iter().filter(|x| **x != 0).max().unwrap()
             - dark_pixels.iter().min().unwrap()
             > 500
         {
-            return Err(Box::new(ImonError::SourceTurnedOn));
+            dark_pixels = vec![]; // The empty vec will be seen as error and fixed
         }
 
         return Ok(ConnectedImon {
