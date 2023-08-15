@@ -127,6 +127,7 @@ pub fn Graph<'a, G: Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
         (min, max)
     });
 
+    // Start zoom behaviour (TODO make this prettier on the code side)
     spawn_local_scoped(cx, async move {
         loop {
             wait_for_pointer_up().await;
@@ -137,6 +138,14 @@ pub fn Graph<'a, G: Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
                     *position.get(),
                     *props.svg_size.get(),
                 );
+
+                let height = end_y - start_y;
+                let width = end_x - start_x;
+                if width < 10 || height < 10 {
+                    // Prevent infinitely small zooms
+                    selecting.set(false);
+                    continue;
+                }
 
                 let new_min = graph_to_spectrum_point(
                     (start_x, end_y), // SVG space is inverted on the y axis
@@ -247,10 +256,6 @@ pub fn Graph<'a, G: Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
             }
         }
     });
-
-    // TODO put a svg path as a memo of the position, selecting and start position
-    // The svg will have to translate pixel space to graph space
-    // Then make the config actually change with the on mouse up
 
     view! { cx,
         div(class="graph-space back", id="graph_space") {
