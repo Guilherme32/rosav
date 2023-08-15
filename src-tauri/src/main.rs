@@ -11,8 +11,17 @@ use config::*;
 use spectrum_handler::new_spectrum_handler;
 
 fn main() {
+    let fern_result = setup_fern_logger();
+
     let (log_tx, log_rx) = mpsc::sync_channel::<Log>(64);
     log_info(&log_tx, "[MST] Iniciando o programa".to_string());
+
+    if fern_result.is_err() {
+        log_war(
+            &log_tx,
+            "[MST] Logger falhou. Registros não serão salvos.".to_string(),
+        );
+    }
 
     let handler_config = match load_handler_config() {
         Ok(config) => config,

@@ -20,7 +20,7 @@ pub fn handler_config_path() -> PathBuf {
         None => Path::new("./").to_path_buf(), // If can't find home, uses config on pwd
     };
 
-    home.join(".config/rosa/handler.toml")
+    home.join(".config/rosav/handler.toml")
 }
 
 pub fn load_handler_config() -> Result<HandlerConfig, Box<dyn Error>> {
@@ -72,7 +72,7 @@ pub fn file_reader_config_path() -> PathBuf {
         None => Path::new("./").to_path_buf(), // If can't find home, uses config on pwd
     };
 
-    home.join(".config/rosa/file_reader.toml")
+    home.join(".config/rosav/file_reader.toml")
 }
 
 pub fn load_file_reader_config() -> Result<FileReaderConfig, Box<dyn Error>> {
@@ -102,7 +102,7 @@ pub fn imon_config_path() -> PathBuf {
         None => Path::new("./").to_path_buf(), // If can't find home, uses config on pwd
     };
 
-    home.join(".config/rosa/imon.toml")
+    home.join(".config/rosav/imon.toml")
 }
 
 pub fn load_imon_config() -> Result<ImonConfig, Box<dyn Error>> {
