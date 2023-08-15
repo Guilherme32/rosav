@@ -92,6 +92,16 @@ fn graph_to_spectrum_point(
     (wavelength, power)
 }
 
+fn traces_have_spectrum(traces: &ReadSignal<Vec<Trace>>) -> bool {
+    for trace in &*traces.get() {
+        if !trace.svg_path.is_empty() {
+            return true;
+        }
+    }
+
+    false
+}
+
 #[derive(Prop)]
 pub struct GraphProps<'a> {
     svg_size: &'a ReadSignal<(i32, i32)>,
@@ -121,7 +131,7 @@ pub fn Graph<'a, G: Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
         loop {
             wait_for_pointer_up().await;
             pointer_down.set(false);
-            if *selecting.get() {
+            if *selecting.get() && traces_have_spectrum(props.traces) {
                 let ((start_x, start_y), (end_x, end_y)) = fix_positions(
                     *starting_position.get(),
                     *position.get(),
