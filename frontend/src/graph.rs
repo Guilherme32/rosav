@@ -106,6 +106,8 @@ fn traces_have_spectrum(traces: &ReadSignal<Vec<Trace>>) -> bool {
 pub struct GraphProps<'a> {
     svg_size: &'a ReadSignal<(i32, i32)>,
     traces: &'a ReadSignal<Vec<Trace>>,
+    shadow_paths: &'a ReadSignal<Vec<String>>,
+    draw_shadow: &'a ReadSignal<bool>,
     limits_change_flag: &'a Signal<bool>,
 }
 
@@ -270,6 +272,13 @@ pub fn Graph<'a, G: Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
                         height=(props.svg_size.get().1 - 20),
                         x="2", y="2") {}
                 }
+
+                (draw_shadow(
+                    cx,
+                    &*props.shadow_paths.get(),
+                    *props.draw_shadow.get()
+                ))
+
                 Indexed(
                     iterable=props.traces,
                     view = |cx, trace| {
@@ -513,5 +522,42 @@ fn GraphLabels<'a, G: Html>(cx: Scope<'a>, props: LabelsProps<'a>) -> View<G> {
                 ) { (txt) }
             }
         )
+    }
+}
+
+fn draw_shadow<G: Html>(cx: Scope, shadow_paths: &[String], draw_shadow: bool) -> View<G> {
+    let shadow_paths = shadow_paths.to_owned();
+
+    let rendered = if draw_shadow {
+        View::new_fragment(
+            shadow_paths
+                .into_iter()
+                .rev()
+                .enumerate()
+                .map(|(i, path)| {
+                    view! { cx,
+                        path(
+                            d=path,
+                            fill="none",
+                            stroke-width="1",
+                            stroke="#C34043",
+                            opacity=(0.4 + 0.8_f64.powi(i as i32)),
+                            clip-path="url(#graph-clip)",
+                        ) {}
+                    }
+                })
+                .collect(),
+        )
+    } else {
+        view! { cx, "" }
+    };
+
+    view! { cx,
+        filter(id="scatter") {
+            feGaussianBlur(in="SourceGraphic", stdDeviation="3")
+        }
+        g(filter="url(#scatter)") {
+            (rendered)
+        }
     }
 }

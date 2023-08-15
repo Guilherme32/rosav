@@ -17,6 +17,7 @@ pub struct SideBarProps<'a> {
     saving: &'a Signal<bool>,
     active_side: &'a ReadSignal<ActiveSide>,
     limits_change_flag: &'a Signal<bool>,
+    draw_shadow: &'a Signal<bool>,
 }
 
 #[component]
@@ -28,7 +29,8 @@ pub fn SideBar<'a, G: Html>(cx: Scope<'a>, props: SideBarProps<'a>) -> View<G> {
                     view! { cx,
                         SideBarMain(
                             traces=props.traces,
-                            saving=props.saving
+                            saving=props.saving,
+                            draw_shadow=props.draw_shadow
                         )
                     },
                 ActiveSide::Config =>
@@ -239,9 +241,14 @@ async fn show_all_means(traces_list: &Signal<Vec<Trace>>) {
     }
 }
 
+async fn toggle_shadow(draw_shadow: &Signal<bool>) {
+    draw_shadow.set(!*draw_shadow.get());
+}
+
 #[derive(Prop)]
 struct GlobalTraceButtons<'a> {
     traces: &'a Signal<Vec<Trace>>,
+    draw_shadow: &'a Signal<bool>,
 }
 
 #[component]
@@ -281,6 +288,11 @@ fn GlobalTraceButtons<'a, G: Html>(cx: Scope<'a>, props: GlobalTraceButtons<'a>)
             save_all_spectra().await;
         })
     };
+    let click_toggle_shadow = move |_| {
+        spawn_local_scoped(cx, async move {
+            toggle_shadow(props.draw_shadow).await;
+        })
+    };
 
     view! { cx,
         div(class="global-buttons back") {
@@ -291,6 +303,12 @@ fn GlobalTraceButtons<'a, G: Html>(cx: Scope<'a>, props: GlobalTraceButtons<'a>)
             button(on:click=click_hide_all_means, title="Esconder todas as médias") { "󰍑 " }
             button(on:click=click_show_all_means, title="Revelar todas as médias") { "󰍐 " }
             button(on:click=click_save_all_spectra, title="Salvar todos os traços") { " " }
+
+            (if *props.draw_shadow.get() {
+                view! {cx, button(on:click=click_toggle_shadow, title="Não desenhar sombra") { "󰊠 " } }
+            } else {
+                view! {cx, button(on:click=click_toggle_shadow, title="Desenhar sombra") { "󰧵 " } }
+            })
         }
     }
 }
@@ -299,6 +317,7 @@ fn GlobalTraceButtons<'a, G: Html>(cx: Scope<'a>, props: GlobalTraceButtons<'a>)
 struct SideBarMainProps<'a> {
     traces: &'a Signal<Vec<Trace>>,
     saving: &'a Signal<bool>,
+    draw_shadow: &'a Signal<bool>,
 }
 
 #[component]
@@ -307,7 +326,7 @@ fn SideBarMain<'a, G: Html>(cx: Scope<'a>, props: SideBarMainProps<'a>) -> View<
         div(class="side-bar-main") {
             p(class="title") { "Traços" }
 
-            GlobalTraceButtons(traces=props.traces)
+            GlobalTraceButtons(traces=props.traces, draw_shadow=props.draw_shadow)
 
             div(class="side-container back") {
                 Keyed(        // Only re-renders on key change
@@ -400,6 +419,7 @@ struct OldHandlerSignals<'a> {
     valley_detection: &'a Signal<String>,
     peak_prominence: &'a Signal<String>,
     peak_detection: &'a Signal<String>,
+    shadow_length: &'a Signal<String>,
     acquisitor: &'a Signal<String>,
 }
 
@@ -423,11 +443,6 @@ async fn get_old_handler_config(signals: OldHandlerSignals<'_>) -> HandlerConfig
     } else {
         signals.pwr_min.set("".to_string());
         signals.pwr_max.set("".to_string());
-    }
-
-    match _config.acquisitor {
-        AcquisitorSimple::FileReader => signals.acquisitor.set("file_reader".to_string()),
-        AcquisitorSimple::Imon => signals.acquisitor.set("imon".to_string()),
     }
 
     let prominence = match _config.valley_detection {
@@ -464,6 +479,13 @@ async fn get_old_handler_config(signals: OldHandlerSignals<'_>) -> HandlerConfig
 
     signals.peak_prominence.set(prominence.to_string());
 
+    signals.shadow_length.set(_config.shadow_length.to_string());
+
+    match _config.acquisitor {
+        AcquisitorSimple::FileReader => signals.acquisitor.set("file_reader".to_string()),
+        AcquisitorSimple::Imon => signals.acquisitor.set("imon".to_string()),
+    }
+
     _config
 }
 
@@ -487,6 +509,8 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
     let peak_prominence = create_signal(cx, String::new());
     let peak_detection = create_signal(cx, String::new());
 
+    let shadow_length = create_signal(cx, String::new());
+
     let acquisitor = create_signal(cx, String::new());
 
     spawn_local_scoped(cx, async move {
@@ -499,6 +523,7 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
             valley_detection,
             peak_prominence,
             peak_detection,
+            shadow_length,
             acquisitor,
         };
 
@@ -527,6 +552,14 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
     let update_limits = move |_| {
         update_wavelength_limits(wl_min, wl_max, props.config);
         update_power_limits(pwr_min, pwr_max, props.config);
+    };
+
+    let update_shadow_length = move |_| {
+        if let Ok(length) = shadow_length.get().parse::<usize>() {
+            (props.config.modify()).shadow_length = length;
+        } else {
+            shadow_length.set("".to_string());
+        }
     };
 
     let acquisitor_select = move |_| {
@@ -605,6 +638,7 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
                     valley_detection,
                     peak_prominence,
                     peak_detection,
+                    shadow_length,
                     acquisitor,
                 };
 
@@ -662,6 +696,15 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
                     ) {}
                     "(dB)"
                 }
+            }
+
+            div(class="element") {
+                p { "Espectros na sombra: " }
+                input(
+                    bind:value=shadow_length,
+                    type="number",
+                    on:focusout=update_shadow_length
+                ) {}
             }
 
             div(class="element") {

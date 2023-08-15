@@ -11,7 +11,7 @@ pub struct TraceInfo {
     pub peak_detection: CriticalDetection,
 }
 
-fn empty_trace_info() -> TraceInfo {
+pub fn empty_trace_info() -> TraceInfo {
     TraceInfo {
         wavelength_limits: (0.0, 0.0),
         power_limits: (0.0, 0.0),

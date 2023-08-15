@@ -31,6 +31,7 @@ pub struct HandlerConfig {
     pub acquisitor: AcquisitorSimple,
     pub valley_detection: CriticalDetection,
     pub peak_detection: CriticalDetection,
+    pub shadow_length: usize,
 }
 
 #[derive(Debug)]
@@ -38,6 +39,7 @@ pub struct SpectrumHandler {
     config: Mutex<HandlerConfig>,
     pub last_spectrum: Arc<Mutex<Option<Spectrum>>>,
     pub frozen_spectra: Mutex<Vec<Spectrum>>,
+    pub shadow_spectra: Mutex<Vec<Spectrum>>,
     pub unread_spectrum: Arc<AtomicBool>,
     pub spectrum_limits: Mutex<Option<Limits>>, // 'Natural' limits
     pub log_sender: SyncSender<Log>,
@@ -126,6 +128,10 @@ impl SpectrumHandler {
 
 impl SpectrumHandler {
     pub fn get_last_spectrum_path(&self, svg_limits: (u32, u32)) -> Option<String> {
+        if self.unread_spectrum.load(atomic::Ordering::Relaxed) {
+            self.update_shadow_spectra();
+        }
+
         let max_power = self.get_max_power();
         let spectrum = self.last_spectrum.lock().unwrap();
 
@@ -248,7 +254,7 @@ impl SpectrumHandler {
     }
 }
 
-// Region: Frozen stuff ---------------------------------------------------------
+// Region: Frozen stuff --------------------------------------------------------
 
 impl SpectrumHandler {
     pub fn freeze_spectrum(&self) {
@@ -423,6 +429,39 @@ impl SpectrumHandler {
     }
 }
 
+// Region: Shadow stuff --------------------------------------------------------
+
+impl SpectrumHandler {
+    fn update_shadow_spectra(&self) {
+        let spectrum = self.last_spectrum.lock().unwrap();
+        let mut shadow_list = self.shadow_spectra.lock().unwrap();
+        let config = self.config.lock().unwrap();
+
+        if let Some(spectrum) = spectrum.as_ref() {
+            shadow_list.push(spectrum.clone());
+        }
+
+        while shadow_list.len() > config.shadow_length {
+            shadow_list.remove(0);
+        }
+    }
+
+    pub fn get_shadow_paths(&self, svg_limits: (u32, u32)) -> Vec<String> {
+        let max_power = self.get_max_power();
+        let spectrum_limits = self.get_limits(max_power);
+        let shadow_list = self.shadow_spectra.lock().unwrap();
+
+        if let Some(spectrum_limits) = spectrum_limits {
+            (*shadow_list)
+                .iter()
+                .map(|spectrum| spectrum.to_path(svg_limits, &spectrum_limits))
+                .collect()
+        } else {
+            vec![]
+        }
+    }
+}
+
 // Region: Loggers -------------------------------------------------------------
 
 impl SpectrumHandler {
@@ -449,6 +488,7 @@ pub fn default_config() -> HandlerConfig {
         acquisitor: AcquisitorSimple::FileReader,
         valley_detection: CriticalDetection::Lorentz { prominence: 3.0 },
         peak_detection: CriticalDetection::None,
+        shadow_length: 10,
     }
 }
 
@@ -522,6 +562,7 @@ pub fn new_spectrum_handler(config: HandlerConfig, log_sender: SyncSender<Log>) 
         config: Mutex::new(config),
         last_spectrum: Arc::new(Mutex::new(None)),
         frozen_spectra: Mutex::new(vec![]),
+        shadow_spectra: Mutex::new(vec![]),
         unread_spectrum: Arc::new(AtomicBool::new(false)),
         spectrum_limits: Mutex::new(None),
         log_sender,

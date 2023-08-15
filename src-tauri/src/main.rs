@@ -66,6 +66,7 @@ fn main() {
             save_all_spectra,
             save_continuous,
             get_saving,
+            get_shadow_paths,
             get_connection_state,
             connect_acquisitor,
             disconnect_acquisitor,

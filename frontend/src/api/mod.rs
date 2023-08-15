@@ -10,6 +10,8 @@ use std::path::PathBuf;
 pub mod acquisitors;
 use acquisitors::*;
 
+// TODO fix the order to match the one on the backend
+
 // Region: Returned structs definition
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
@@ -57,6 +59,7 @@ pub struct HandlerConfig {
     pub acquisitor: acquisitors::AcquisitorSimple,
     pub valley_detection: CriticalDetection,
     pub peak_detection: CriticalDetection,
+    pub shadow_length: usize,
 }
 
 pub fn empty_handler_config() -> HandlerConfig {
@@ -67,6 +70,7 @@ pub fn empty_handler_config() -> HandlerConfig {
         acquisitor: AcquisitorSimple::FileReader,
         valley_detection: CriticalDetection::None,
         peak_detection: CriticalDetection::None,
+        shadow_length: 0,
     }
 }
 
@@ -235,6 +239,13 @@ pub async fn save_frozen_spectrum(id: usize) {
 
 pub async fn save_all_spectra() {
     invoke("save_all_spectra", to_value(&()).unwrap()).await;
+}
+
+pub async fn get_shadow_paths() -> Vec<String> {
+    let from_back = invoke("get_shadow_paths", to_value(&()).unwrap()).await;
+    let obj_rebuilt: Vec<String> = from_value(from_back).unwrap();
+
+    obj_rebuilt
 }
 
 #[derive(Serialize, Deserialize)]

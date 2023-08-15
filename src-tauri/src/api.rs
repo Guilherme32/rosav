@@ -250,7 +250,6 @@ pub fn save_frozen_spectrum(
     }
 }
 
-// NOTE change here
 #[tauri::command]
 pub async fn save_all_spectra(
     handler: tauri::State<'_, SpectrumHandler>,
@@ -276,7 +275,6 @@ pub async fn save_all_spectra(
             return Err(());
         }
 
-        // let info = vec![];
         for id in 0..handler.get_frozen_length() {
             let file_path = folder_path.join(format!("spectrum{:03}.txt", id));
             handler.save_frozen(id, &file_path);
@@ -295,6 +293,16 @@ pub async fn save_all_spectra(
     }
 
     Ok(())
+}
+
+// SubRegion: Shadow stuff -----------------------------------------------------
+
+#[tauri::command]
+pub fn get_shadow_paths(
+    handler: tauri::State<SpectrumHandler>,
+    window: tauri::Window,
+) -> Vec<String> {
+    handler.get_shadow_paths(get_svg_size(window))
 }
 
 // Region: Acquisitor functions ------------------------------------------------

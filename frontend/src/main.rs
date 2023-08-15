@@ -63,7 +63,9 @@ pub enum ActiveSide {
 #[component]
 fn Main<G: Html>(cx: Scope) -> View<G> {
     let traces = create_signal(cx, vec![new_trace(0, true, true, true)]);
-    // let active_trace = create_signal(cx, new_trace(0, true, true))
+    let shadow_paths_info = create_signal(cx, empty_trace_info());
+    let shadow_paths = create_signal(cx, vec!["".to_string()]);
+    let draw_shadow = create_signal(cx, true);
 
     let svg_size = create_signal(cx, (0i32, 0i32));
 
@@ -85,6 +87,10 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
                     trace.valleys = new_valleys;
                     trace.peaks = new_peaks;
                 };
+
+                // Also update the shadow
+                shadow_paths_info.set(current_info.clone());
+                shadow_paths.set(get_shadow_paths().await);
             }
         }
     });
@@ -96,11 +102,11 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
             let current_info = get_trace_info().await;
 
             let new_svg_size = get_svg_size().await;
-            for (id, trace) in traces.modify().iter_mut().enumerate() {
+            'traces: for (id, trace) in traces.modify().iter_mut().enumerate() {
                 // Update when the window changes
                 if trace.svg_path.is_empty() {
                     // No old spectrum, no update
-                    continue;
+                    continue 'traces;
                 }
                 if trace.drawn_info != current_info {
                     trace.drawn_info = current_info.clone();
@@ -115,6 +121,11 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
                     }
                 }
             }
+
+            if *shadow_paths_info.get() != current_info {
+                shadow_paths_info.set(current_info.clone());
+                shadow_paths.set(get_shadow_paths().await);
+            };
             svg_size.set(new_svg_size);
         }
     });
@@ -139,14 +150,17 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
                 traces=traces,
                 saving=saving,
                 active_side=active_side,
-                limits_change_flag=limits_change_flag
+                limits_change_flag=limits_change_flag,
+                draw_shadow=draw_shadow
             )
 
             div(class="vertical-container") {
                 Graph(
                     traces=traces,
                     svg_size=svg_size,
-                    limits_change_flag=limits_change_flag
+                    shadow_paths=shadow_paths,
+                    limits_change_flag=limits_change_flag,
+                    draw_shadow=draw_shadow
                 )
 
                 LowerBar(
