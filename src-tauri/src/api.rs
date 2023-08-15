@@ -256,6 +256,10 @@ pub async fn save_all_spectra(
     handler: tauri::State<'_, SpectrumHandler>,
     window: tauri::Window,
 ) -> Result<(), ()> {
+    if handler.get_frozen_length() == 0 {
+        return Ok(());
+    }
+
     let folder_path = blocking::FileDialogBuilder::new()
         .set_parent(&window)
         .pick_folder();
