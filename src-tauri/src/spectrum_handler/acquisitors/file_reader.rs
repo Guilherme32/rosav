@@ -376,6 +376,11 @@ fn watcher_callback<T: std::fmt::Debug>(
         }
     };
 
+    if text.is_empty() {
+        // When editing files it reads as an empty string
+        return Ok(()); // We can ignore that
+    }
+
     let spectrum = match Spectrum::from_csv_text(&text) {
         Ok(spectrum) => spectrum,
         Err(error) => {
