@@ -539,7 +539,7 @@ fn draw_shadow<G: Html>(cx: Scope, shadow_paths: &[String], draw_shadow: bool) -
                         path(
                             d=path,
                             fill="none",
-                            stroke-width="1",
+                            stroke-width="3",
                             stroke="#C34043",
                             opacity=(0.4 + 0.8_f64.powi(i as i32)),
                             clip-path="url(#graph-clip)",
