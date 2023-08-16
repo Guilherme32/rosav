@@ -541,7 +541,7 @@ fn draw_shadow<G: Html>(cx: Scope, shadow_paths: &[String], draw_shadow: bool) -
                             fill="none",
                             stroke-width="3",
                             stroke="#C34043",
-                            opacity=(0.4 + 0.8_f64.powi(i as i32)),
+                            opacity=(0.3 + 0.8_f64.powi(i as i32)),
                             clip-path="url(#graph-clip)",
                         ) {}
                     }
@@ -553,6 +553,9 @@ fn draw_shadow<G: Html>(cx: Scope, shadow_paths: &[String], draw_shadow: bool) -
     };
 
     view! { cx,
+        // NOTE this filter is way hevier than what I expected (on my linux laptop, at least)
+        // If this becomes a problem, I'll need to think of something else, or maybe
+        // rendering to canvas instead of svg, in order to use hardware acceleration
         filter(id="scatter") {
             feGaussianBlur(in="SourceGraphic", stdDeviation="3")
         }

@@ -328,6 +328,11 @@ pub fn acquisitor_start_reading(handler: tauri::State<SpectrumHandler>) {
 }
 
 #[tauri::command]
+pub fn acquisitor_read_single(handler: tauri::State<SpectrumHandler>) {
+    let _result = handler.read_single();
+}
+
+#[tauri::command]
 pub fn acquisitor_stop_reading(handler: tauri::State<SpectrumHandler>) {
     let _result = handler.stop_reading();
 }

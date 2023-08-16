@@ -1,9 +1,0 @@
-[2023-08-15 10:16:44 INFO app] info message
-[2023-08-15 10:16:44 WARN app] warn message
-[2023-08-15 10:16:44 ERROR app] error message
-[2023-08-15 10:19:03 INFO app] info message
-[2023-08-15 10:19:03 WARN app] warn message
-[2023-08-15 10:19:03 ERROR app] error message
-[2023-08-15 10:19:05 INFO app] info message
-[2023-08-15 10:19:05 WARN app] warn message
-[2023-08-15 10:19:05 ERROR app] error message

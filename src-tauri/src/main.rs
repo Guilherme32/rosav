@@ -71,6 +71,7 @@ fn main() {
             connect_acquisitor,
             disconnect_acquisitor,
             acquisitor_start_reading,
+            acquisitor_read_single,
             acquisitor_stop_reading,
             pick_folder,
             get_handler_config,

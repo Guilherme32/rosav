@@ -208,6 +208,12 @@ fn LowerBar<'a, G: Html>(cx: Scope<'a>, props: LowerBarProps<'a>) -> View<G> {
             update_state(props.connection_state).await;
         })
     };
+    let read_single = move |_| {
+        spawn_local_scoped(cx, async move {
+            acquisitor_read_single().await;
+            update_state(props.connection_state).await;
+        })
+    };
     let stop_reading = move |_| {
         spawn_local_scoped(cx, async move {
             acquisitor_stop_reading().await;
@@ -240,7 +246,7 @@ fn LowerBar<'a, G: Html>(cx: Scope<'a>, props: LowerBarProps<'a>) -> View<G> {
                     ConnectionState::Connected =>
                         view! { cx,
                             button(on:click=start_reading, class="no-offset", title="Ler continuamente") { " " }
-                            // button(style="padding-right: 0.6rem;") { "󱑹 " }        // TODO put single read
+                            button(on:click=read_single, class="no-offset", title="Ler 1 espectro") { " " }
                             button(on:click=disconnect, title="Desconectar aquisitor") { "󱐤 " }
                         },
                     ConnectionState::Reading =>
@@ -275,7 +281,7 @@ fn Status<'a, G: Html>(cx: Scope<'a>, props: StatusProps<'a>) -> View<G> {
                 ConnectionState::Disconnected =>
                     view! { cx, p() { "Desconectado" } },
                 ConnectionState::Reading =>
-                    view! { cx, p() { "Lendo Const." } }
+                    view! { cx, p() { "Lendo" } }
             })
 
             (if *props.saving.get() {

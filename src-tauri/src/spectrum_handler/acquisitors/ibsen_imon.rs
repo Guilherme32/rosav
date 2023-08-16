@@ -206,7 +206,11 @@ impl Imon {
         Ok(())
     }
 
-    pub fn start_reading(&self, handler: &SpectrumHandler) -> Result<(), ImonError> {
+    pub fn start_reading(
+        &self,
+        handler: &SpectrumHandler,
+        single_read: bool,
+    ) -> Result<(), ImonError> {
         let mut state = self.state.lock().unwrap();
 
         match &mut *state {
@@ -242,10 +246,8 @@ impl Imon {
                     log_tx: Arc::new(self.log_sender.clone()),
                     state: Arc::clone(&self.state),
                     config_rx,
-                    port: Arc::clone(&connected_imon.port),
-                    n_pixels: connected_imon.n_pixels,
-                    coefficients: connected_imon.coefficients,
-                    dark_pixels: connected_imon.dark_pixels.clone(),
+                    single_read,
+                    connected_imon: connected_imon.clone(),
                 };
 
                 thread::spawn(move || {
@@ -468,18 +470,20 @@ struct ConstantReadArgs {
     log_tx: Arc<SyncSender<Log>>,
     state: Arc<Mutex<ImonState>>,
     config_rx: Receiver<ImonConfig>,
-    port: Arc<Mutex<Box<dyn SerialPort>>>,
-    n_pixels: u32,
-    coefficients: ImonCoefficients,
-    dark_pixels: Vec<u32>,
+    single_read: bool,
+    connected_imon: ConnectedImon,
 }
 
+// TODO single read is currently in here, but it really smells like spagheti.
+// TODO it would be nice to extract the single read and call it from here
 fn constant_read(args: ConstantReadArgs) {
     let mut config = default_config();
     loop {
-        sleep(Duration::from_millis(config.read_delay_ms));
+        if !args.single_read {
+            sleep(Duration::from_millis(config.read_delay_ms));
+        }
 
-        let mut port = args.port.lock().unwrap();
+        let mut port = args.connected_imon.port.lock().unwrap();
 
         match args.config_rx.try_recv() {
             Ok(new_config) => {
@@ -496,9 +500,9 @@ fn constant_read(args: ConstantReadArgs) {
                 &config,
                 10,
                 config.multisampling,
-                args.n_pixels,
-                &args.coefficients,
-                &args.dark_pixels,
+                args.connected_imon.n_pixels,
+                &args.connected_imon.coefficients,
+                &args.connected_imon.dark_pixels,
             ) {
                 Ok(spectrum) => {
                     if args.saving.load(Ordering::Relaxed) {
@@ -507,6 +511,12 @@ fn constant_read(args: ConstantReadArgs) {
                     let mut last_spectrum = args.last_spectrum.lock().unwrap();
                     *last_spectrum = Some(spectrum);
                     args.new_spectrum_flag.store(true, Ordering::Relaxed);
+
+                    if args.single_read {
+                        let mut state = args.state.lock().unwrap();
+                        *state = ImonState::Connected(args.connected_imon.clone());
+                        return;
+                    }
 
                     break;
                 }

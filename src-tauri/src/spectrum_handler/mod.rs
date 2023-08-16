@@ -98,8 +98,18 @@ impl SpectrumHandler {
     pub fn start_reading(&self) -> Result<(), Box<dyn Error>> {
         let acquisitor = self.acquisitor.lock().unwrap();
         match &*acquisitor {
-            Acquisitor::FileReader(file_reader) => file_reader.start_reading(self)?,
-            Acquisitor::Imon(imon) => imon.start_reading(self)?,
+            Acquisitor::FileReader(file_reader) => file_reader.start_reading(self, false)?,
+            Acquisitor::Imon(imon) => imon.start_reading(self, false)?,
+        }
+
+        Ok(())
+    }
+
+    pub fn read_single(&self) -> Result<(), Box<dyn Error>> {
+        let acquisitor = self.acquisitor.lock().unwrap();
+        match &*acquisitor {
+            Acquisitor::FileReader(file_reader) => file_reader.start_reading(self, true)?,
+            Acquisitor::Imon(imon) => imon.start_reading(self, true)?,
         }
 
         Ok(())

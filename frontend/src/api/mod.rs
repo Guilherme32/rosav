@@ -287,6 +287,10 @@ pub async fn acquisitor_start_reading() {
     invoke("acquisitor_start_reading", to_value(&()).unwrap()).await;
 }
 
+pub async fn acquisitor_read_single() {
+    invoke("acquisitor_read_single", to_value(&()).unwrap()).await;
+}
+
 pub async fn acquisitor_stop_reading() {
     invoke("acquisitor_stop_reading", to_value(&()).unwrap()).await;
 }

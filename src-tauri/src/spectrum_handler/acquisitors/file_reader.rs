@@ -163,7 +163,11 @@ impl FileReader {
         Ok(())
     }
 
-    pub fn start_reading(&self, handler: &SpectrumHandler) -> Result<(), FileReaderError> {
+    pub fn start_reading(
+        &self,
+        handler: &SpectrumHandler,
+        single_read: bool,
+    ) -> Result<(), FileReaderError> {
         let mut state = self.state.lock().unwrap();
 
         match *state {
@@ -206,7 +210,12 @@ impl FileReader {
             &auto_save_path,
             Arc::clone(&log_sender_clone),
         ) {
-            Ok(_) => (),
+            Ok(_) => {
+                if single_read {
+                    let mut state = state_reference.lock().unwrap();
+                    *state = ReaderState::Connected;
+                }
+            }
             Err(_) => {
                 let mut state = state_reference.lock().unwrap();
                 *state = ReaderState::Disconnected;
@@ -230,7 +239,11 @@ impl FileReader {
         }
 
         *state = ReaderState::Reading(watcher);
-        self.log_info("[FSR] Aquisitor lendo".to_string());
+        if single_read {
+            self.log_info("[FSR] Aquisitor lendo 1 espectro".to_string());
+        } else {
+            self.log_info("[FSR] Aquisitor lendo contínuo".to_string());
+        }
         Ok(())
     }
 
