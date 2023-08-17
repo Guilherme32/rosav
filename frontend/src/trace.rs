@@ -79,6 +79,10 @@ fn trace_id_to_color(id: u8) -> String {
 
 impl Trace {
     pub fn get_color(&self) -> String {
+        if self.active {
+            return "#C8C093".to_string();
+        }
+
         if let Some(color_id) = self.color_id {
             trace_id_to_color(color_id)
         } else {

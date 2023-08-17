@@ -65,7 +65,7 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
     let traces = create_signal(cx, vec![new_trace(0, true, true, true)]);
     let shadow_paths_info = create_signal(cx, empty_trace_info());
     let shadow_paths = create_signal(cx, vec!["".to_string()]);
-    let draw_shadow = create_signal(cx, true);
+    let draw_shadow = create_signal(cx, false);
 
     let svg_size = create_signal(cx, (0i32, 0i32));
 
