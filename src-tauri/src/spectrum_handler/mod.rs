@@ -462,8 +462,11 @@ impl SpectrumHandler {
         let shadow_list = self.shadow_spectra.lock().unwrap();
 
         if let Some(spectrum_limits) = spectrum_limits {
-            (*shadow_list)
+            (*shadow_list) // shadow_list goes from older to newer
                 .iter()
+                .rev()
+                .skip(1) // Ignore the newest
+                .rev()
                 .map(|spectrum| spectrum.to_path(svg_limits, &spectrum_limits))
                 .collect()
         } else {

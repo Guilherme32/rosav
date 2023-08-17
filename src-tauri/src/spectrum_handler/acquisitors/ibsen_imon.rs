@@ -302,7 +302,7 @@ impl Imon {
         let mut config = self.config.lock().unwrap();
         let state = self.state.lock().unwrap();
         if let ImonState::Reading(reading_imon) = &*state {
-            let _ = reading_imon.config_tx.send(config.clone());
+            let _ = reading_imon.config_tx.send(new_config.clone());
         }
 
         *config = new_config;
@@ -488,6 +488,7 @@ fn constant_read(args: ConstantReadArgs) {
         match args.config_rx.try_recv() {
             Ok(new_config) => {
                 config = new_config;
+                // println!("{:?}", config);
             }
             Err(TryRecvError::Empty) => (),
             Err(TryRecvError::Disconnected) => break,
