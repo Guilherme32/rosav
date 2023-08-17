@@ -451,7 +451,8 @@ impl SpectrumHandler {
             shadow_list.push(spectrum.clone());
         }
 
-        while shadow_list.len() > config.shadow_length {
+        // +1 because the last is in the list, but is not sent sa shadow
+        while shadow_list.len() > config.shadow_length + 1 {
             shadow_list.remove(0);
         }
     }
