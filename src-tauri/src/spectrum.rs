@@ -198,17 +198,9 @@ impl Spectrum {
 
         let last_entry = self.values.last().unwrap(); // The size is checked above
 
-        let max_points = 1000; // To reduce svg drawing load
-        let skip = if self.values.len() < max_points {
-            1
-        } else {
-            self.values.len() / max_points
-        };
-
         let path = &self
             .values
             .iter()
-            .skip(skip)
             .chain((0..3).map(|_| last_entry)) // Without this the end is cropped
             .map(cvt)
             .tuple_windows() // Cropped because of the window
