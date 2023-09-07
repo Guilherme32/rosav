@@ -212,7 +212,18 @@ impl SpectrumHandler {
 
             new_limits.power.0 -= 3.0;
             new_limits.power.1 += 3.0;
-            *limits = Some(new_limits);
+
+            // To avoid jitter when small changes are made to the spectrum limits
+            if let Some(old_limits) = (*limits).clone() {
+                if new_limits.wavelength != old_limits.wavelength
+                    || new_limits.power.0 < old_limits.power.0 - 2.0
+                    || new_limits.power.1 > old_limits.power.1 + 2.0
+                {
+                    *limits = Some(new_limits);
+                }
+            } else {
+                *limits = Some(new_limits);
+            }
         }
     }
 
