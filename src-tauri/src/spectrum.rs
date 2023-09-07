@@ -185,9 +185,6 @@ impl Spectrum {
     pub fn to_path(&self, svg_limits: (u32, u32), graph_limits: &Limits) -> String {
         let svg_limits = (svg_limits.0 as f64 - 40.0, svg_limits.1 as f64 - 16.6);
 
-        // let limits_pwr = (graph_limits.power.1, graph_limits.power.0);        // Invert because svg coords
-        // let limits_wl = graph_limits.wavelength;    // TODO remove
-
         if self.values.is_empty() {
             return "".to_string();
         }
