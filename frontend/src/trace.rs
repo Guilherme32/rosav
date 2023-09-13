@@ -36,12 +36,28 @@ pub struct Trace {
     pub drawn_info: TraceInfo,       // Stuff to check if it needs to be redrawn
 }
 
-pub fn new_trace(id: u8, visible: bool, draw_valleys: bool, draw_valleys_mean: bool) -> Trace {
+pub fn new_trace(last_active: &Trace) -> Trace {
     Trace {
-        id,
-        visible,
-        draw_valleys,
-        draw_valleys_mean,
+        id: last_active.id + 1,
+        visible: last_active.visible,
+        draw_valleys: last_active.draw_valleys,
+        draw_valleys_mean: last_active.draw_valleys_mean,
+        color_id: last_active.color_id,
+        active: true,
+        valleys: vec![],
+        peaks: vec![],
+        svg_path: String::new(),
+        freeze_time: None,
+        drawn_info: empty_trace_info(),
+    }
+}
+
+pub fn first_trace() -> Trace {
+    Trace {
+        id: 0,
+        visible: true,
+        draw_valleys: true,
+        draw_valleys_mean: true,
         color_id: None,
         active: true,
         valleys: vec![],
@@ -90,16 +106,33 @@ impl Trace {
         }
     }
 
-    pub fn style(&self) -> String {
+    pub fn name_style(&self) -> String {
         format!("background-color: {};", self.get_color())
+    }
+
+    pub fn group_style(&self) -> String {
+        if let Some(color_id) = self.color_id {
+            let color = trace_id_to_color(color_id);
+            format!("background-color: {}; color: #54546D;", color)
+        } else {
+            String::new()
+        }
     }
 
     pub fn change_color(&mut self) {
         if let Some(color_id) = self.color_id {
-            self.color_id = Some((color_id + 1) % (COLORS.len() as u8));
+            if (color_id + 1) as usize >= COLORS.len() {
+                self.color_id = None;
+            } else {
+                self.color_id = Some(color_id + 1);
+            }
         } else {
-            self.color_id = Some((self.id + 1) % (COLORS.len() as u8));
+            self.color_id = Some(0);
         }
+    }
+
+    pub fn reset_color(&mut self) {
+        self.color_id = None;
     }
 
     pub fn valleys_mean(&self) -> Option<(f64, f64)> {

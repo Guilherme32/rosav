@@ -62,19 +62,18 @@ async fn freeze_callback(id: u8, traces_list: &Signal<Vec<Trace>>) {
     trace.freeze_time = Some(get_time().await);
     trace.active = false;
 
-    let visible = trace.visible;
-    let draw_valleys = trace.draw_valleys;
-    let draw_valleys_mean = trace.draw_valleys_mean;
-
-    traces_list.push(new_trace(id + 1, visible, draw_valleys, draw_valleys_mean));
+    let trace = new_trace(trace); // new active trace
+    traces_list.push(trace);
 
     freeze_spectrum().await;
 }
 
 async fn delete_callback(id: u8, traces_list: &Signal<Vec<Trace>>) {
-    traces_list.modify().remove(id as usize);
+    let mut traces_list = traces_list.modify();
 
-    for (i, trace) in traces_list.modify().iter_mut().enumerate() {
+    traces_list.remove(id as usize);
+
+    for (i, trace) in traces_list.iter_mut().enumerate() {
         trace.id = i as u8;
     }
 
@@ -110,8 +109,82 @@ async fn change_color_callback(id: u8, traces_list: &Signal<Vec<Trace>>) {
     trace.change_color();
 }
 
+// Group callbacks ------------------------------------------------------------
+fn get_grouped_trace_ids(main_id: u8, traces_list: &Signal<Vec<Trace>>) -> Vec<u8> {
+    let traces_list = traces_list.get();
+
+    let group_id = if let Some(color_id) = traces_list[main_id as usize].color_id {
+        color_id
+    } else {
+        return vec![];
+    };
+
+    traces_list
+        .iter()
+        .filter(|trace| {
+            if let Some(color_id) = trace.color_id {
+                color_id == group_id
+            } else {
+                false
+            }
+        })
+        .filter(|trace| !trace.active)
+        .map(|trace| trace.id)
+        .collect()
+}
+
+async fn delete_group_callback(main_id: u8, traces_list: &Signal<Vec<Trace>>) {
+    let deleted_ids = get_grouped_trace_ids(main_id, traces_list);
+    let mut traces_list = traces_list.modify();
+
+    for id in deleted_ids.iter().rev() {
+        traces_list.remove(*id as usize);
+        delete_frozen_spectrum(*id as usize).await;
+    }
+
+    for (i, trace) in traces_list.iter_mut().enumerate() {
+        trace.id = i as u8;
+    }
+}
+
+async fn visibility_group_callback(main_id: u8, traces_list: &Signal<Vec<Trace>>) {
+    let new_visible = !traces_list.get()[main_id as usize].visible;
+    let group_ids = get_grouped_trace_ids(main_id, traces_list);
+    let mut traces_list = traces_list.modify();
+
+    for id in group_ids {
+        traces_list[id as usize].visible = new_visible;
+    }
+}
+
+async fn draw_valleys_group_callback(main_id: u8, traces_list: &Signal<Vec<Trace>>) {
+    let new_draw = !traces_list.get()[main_id as usize].draw_valleys;
+    let group_ids = get_grouped_trace_ids(main_id, traces_list);
+    let mut traces_list = traces_list.modify();
+
+    for id in group_ids {
+        traces_list[id as usize].draw_valleys = new_draw;
+    }
+}
+
+async fn draw_valleys_mean_group_callback(main_id: u8, traces_list: &Signal<Vec<Trace>>) {
+    let new_draw = !traces_list.get()[main_id as usize].draw_valleys_mean;
+    let group_ids = get_grouped_trace_ids(main_id, traces_list);
+    let mut traces_list = traces_list.modify();
+
+    for id in group_ids {
+        traces_list[id as usize].draw_valleys_mean = new_draw;
+    }
+}
+
+async fn reset_color_callback(id: u8, traces_list: &Signal<Vec<Trace>>) {
+    let trace = &mut traces_list.modify()[id as usize];
+    trace.reset_color();
+}
+
 #[component]
 fn RenderTrace<'a, G: Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<G> {
+    // Left clicks ------------------------------------------------------------
     let click_freeze = move |_| {
         spawn_local_scoped(cx, async move {
             freeze_callback(props.trace.id, props.traces_list).await;
@@ -153,7 +226,37 @@ fn RenderTrace<'a, G: Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<
         })
     };
 
-    let name_style = props.trace.style();
+    // Right clicks -----------------------------------------------------------
+    let click_group_delete = move |_| {
+        spawn_local_scoped(cx, async move {
+            delete_group_callback(props.trace.id, props.traces_list).await;
+        })
+    };
+    let click_group_visibility = move |_| {
+        spawn_local_scoped(cx, async move {
+            visibility_group_callback(props.trace.id, props.traces_list).await;
+        })
+    };
+    let click_group_draw_valleys = move |_| {
+        spawn_local_scoped(cx, async move {
+            draw_valleys_group_callback(props.trace.id, props.traces_list).await;
+        })
+    };
+    let click_group_draw_valleys_mean = move |_| {
+        spawn_local_scoped(cx, async move {
+            draw_valleys_mean_group_callback(props.trace.id, props.traces_list).await;
+        })
+    };
+    let click_reset_color = move |_| {
+        spawn_local_scoped(cx, async move {
+            reset_color_callback(props.trace.id, props.traces_list).await;
+        })
+    };
+
+    // Actual render ----------------------------------------------------------
+    let name_style = props.trace.name_style();
+    let group_style = props.trace.group_style();
+
     view! { cx,
         div(class="trace") {
             span(class="name", style=name_style) {
@@ -167,38 +270,83 @@ fn RenderTrace<'a, G: Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<
             }
             div(class="buttons") {
                 (match props.trace.active {
-                    true => view! { cx, button(on:click=click_freeze, title="Congelar traço") { " " } },
-                    false => view! { cx, button(on:click=click_delete, title="Excluir traço") { "󰜺 " } }
+                    true => view! { cx,
+                        button(on:click=click_freeze,
+                            title="Congelar traço"
+                        ) { " " } },
+                    false => view! { cx, button(
+                        on:click=click_delete,
+                        on:contextmenu=click_group_delete,
+                        title="Excluir traço"
+                    ) { "󰜺 " } }
                 })
 
                 (if props.trace.visible {
-                    view! { cx, button(on:click=click_visibility, title="Esconder traço") { "󰈈 " } }
+                    view! { cx, button(
+                        on:click=click_visibility,
+                        on:contextmenu=click_group_visibility,
+                        title="Esconder traço"
+                    ) { "󰈈 " } }
                 } else {
-                    view! { cx, button(on:click=click_visibility, title="Revelar traço") { "󰈉 " } }
+                    view! { cx, button(
+                        on:click=click_visibility,
+                        on:contextmenu=click_group_visibility,
+                        title="Revelar traço"
+                    ) { "󰈉 " } }
                 })
 
                 (if props.trace.draw_valleys {
-                    view! { cx, button(on:click=click_draw_valleys, title="Esconder vales/picos") { "󰆤 " } }
+                    view! { cx, button(
+                        on:click=click_draw_valleys,
+                        on:contextmenu=click_group_draw_valleys,
+                        title="Esconder vales/picos",
+                    ) { "󰆤 " } }
                 } else {
-                    view! { cx, button(on:click=click_draw_valleys, title="Revelar vales/picos") { "󰽅 " } }
+                    view! { cx, button(
+                        on:click=click_draw_valleys,
+                        on:contextmenu=click_group_draw_valleys,
+                        title="Revelar vales/picos"
+                    ) { "󰽅 " } }
                 })
 
                 (if props.trace.active {
                     if *props.saving.get() {
-                        view! { cx, button(on:click=click_save_continuous, title="Parar de salvar novos traços") { "󱃩 " } }
+                        view! { cx, button(
+                            on:click=click_save_continuous,
+                            title="Parar de salvar novos traços"
+                        ) { "󱃩 " } }
                     } else {
-                        view! { cx, button(on:click=click_save_continuous, title="Salvar novos traços") { "󱧹 " } }
+                        view! { cx, button(
+                            on:click=click_save_continuous,
+                            title="Salvar novos traços"
+                        ) { "󱧹 " } }
                     }
                 } else {
-                    view! { cx, button(on:click=click_save_frozen, title="Salvar traço") { " " } }
+                    view! { cx, button(
+                            on:click=click_save_frozen,
+                            title="Salvar traço"
+                        ) { " " } }
                 })
 
-                button(on:click=click_change_color, title="Mudar cor do traço") { "󰈊 " }
+                button(
+                    on:click=click_change_color,
+                    style=group_style,
+                    on:contextmenu=click_reset_color,
+                    title="Mudar grupo do traço"
+                ) { "󰈊 " }
 
                 (if props.trace.draw_valleys_mean {
-                    view! { cx, button(on:click=click_draw_valleys_mean, title="Esconder médias") { "󰍐 " } }
+                    view! { cx, button(
+                        on:click=click_draw_valleys_mean,
+                        on:contextmenu=click_group_draw_valleys_mean,
+                        title="Esconder médias"
+                    ) { "󰍐 " } }
                 } else {
-                    view! { cx, button(on:click=click_draw_valleys_mean, title="Revelar médias") { "󰍑 " } }
+                    view! { cx, button(
+                        on:click=click_draw_valleys_mean,
+                        on:contextmenu=click_group_draw_valleys_mean,
+                        title="Revelar médias"
+                    ) { "󰍑 " } }
                 })
             }
         }
