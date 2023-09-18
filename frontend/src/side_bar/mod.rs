@@ -18,6 +18,7 @@ pub struct SideBarProps<'a> {
     active_side: &'a ReadSignal<ActiveSide>,
     limits_change_flag: &'a Signal<bool>,
     draw_shadow: &'a Signal<bool>,
+    draw_time_series: &'a Signal<bool>,
 }
 
 #[component]
@@ -30,7 +31,8 @@ pub fn SideBar<'a, G: Html>(cx: Scope<'a>, props: SideBarProps<'a>) -> View<G> {
                         SideBarMain(
                             traces=props.traces,
                             saving=props.saving,
-                            draw_shadow=props.draw_shadow
+                            draw_shadow=props.draw_shadow,
+                            draw_time_series=props.draw_time_series,
                         )
                     },
                 ActiveSide::Config =>
@@ -393,10 +395,15 @@ async fn toggle_shadow(draw_shadow: &Signal<bool>) {
     draw_shadow.set(!*draw_shadow.get());
 }
 
+async fn toggle_time_series(draw_time_series: &Signal<bool>) {
+    draw_time_series.set(!*draw_time_series.get());
+}
+
 #[derive(Prop)]
 struct GlobalTraceButtons<'a> {
     traces: &'a Signal<Vec<Trace>>,
     draw_shadow: &'a Signal<bool>,
+    draw_time_series: &'a Signal<bool>,
 }
 
 #[component]
@@ -441,6 +448,11 @@ fn GlobalTraceButtons<'a, G: Html>(cx: Scope<'a>, props: GlobalTraceButtons<'a>)
             toggle_shadow(props.draw_shadow).await;
         })
     };
+    let click_toggle_time_series = move |_| {
+        spawn_local_scoped(cx, async move {
+            toggle_time_series(props.draw_time_series).await;
+        })
+    };
 
     view! { cx,
         div(class="global-buttons back") {
@@ -457,6 +469,18 @@ fn GlobalTraceButtons<'a, G: Html>(cx: Scope<'a>, props: GlobalTraceButtons<'a>)
             } else {
                 view! {cx, button(on:click=click_toggle_shadow, title="Desenhar sombra") { "󰧵 " } }
             })
+
+            (if *props.draw_time_series.get() {
+                view! {cx, button(
+                    on:click=click_toggle_time_series,
+                    title="Não desenhar série temporal"
+                ) { "󰀠 " } }
+            } else {
+                view! {cx, button(
+                        on:click=click_toggle_time_series,
+                        title="Desenhar série temporal"
+                    ) { "󰀣 " } }
+            })
         }
     }
 }
@@ -466,6 +490,7 @@ struct SideBarMainProps<'a> {
     traces: &'a Signal<Vec<Trace>>,
     saving: &'a Signal<bool>,
     draw_shadow: &'a Signal<bool>,
+    draw_time_series: &'a Signal<bool>,
 }
 
 #[component]
@@ -474,7 +499,11 @@ fn SideBarMain<'a, G: Html>(cx: Scope<'a>, props: SideBarMainProps<'a>) -> View<
         div(class="side-bar-main") {
             p(class="title") { "Traços" }
 
-            GlobalTraceButtons(traces=props.traces, draw_shadow=props.draw_shadow)
+            GlobalTraceButtons(
+                traces=props.traces,
+                draw_shadow=props.draw_shadow,
+                draw_time_series=props.draw_time_series,
+            )
 
             div(class="side-container back") {
                 Keyed(        // Only re-renders on key change

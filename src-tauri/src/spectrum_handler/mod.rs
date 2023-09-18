@@ -11,17 +11,23 @@ use std::sync::{Arc, Mutex};
 
 use std::path::PathBuf;
 
+use chrono::Local;
 use serde::{Deserialize, Serialize};
 
 use crate::spectrum::*;
 
 pub mod acquisitors;
+pub mod time_series;
+
+use time_series::TimeSeries;
 
 use acquisitors::{
     file_reader::{FileReader, FileReaderConfig},
     ibsen_imon::{Imon, ImonConfig},
     load_acquisitor,
 };
+
+use self::time_series::TimedEntry;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HandlerConfig {
@@ -40,6 +46,7 @@ pub struct SpectrumHandler {
     pub last_spectrum: Arc<Mutex<Option<Spectrum>>>,
     pub frozen_spectra: Mutex<Vec<Spectrum>>,
     pub shadow_spectra: Mutex<Vec<Spectrum>>,
+    pub valleys_series: Mutex<TimeSeries>,
     pub unread_spectrum: Arc<AtomicBool>,
     pub spectrum_limits: Mutex<Option<Limits>>, // 'Natural' limits
     pub log_sender: SyncSender<Log>,
@@ -140,6 +147,7 @@ impl SpectrumHandler {
     pub fn get_last_spectrum_path(&self, svg_limits: (u32, u32)) -> Option<String> {
         if self.unread_spectrum.load(atomic::Ordering::Relaxed) {
             self.update_shadow_spectra();
+            self.update_time_series();
         }
 
         let max_power = self.get_max_power();
@@ -487,6 +495,52 @@ impl SpectrumHandler {
     }
 }
 
+// Region: Time Series stuff
+
+impl SpectrumHandler {
+    fn update_time_series(&self) {
+        let mut spectrum = self.last_spectrum.lock().unwrap();
+        let config = self.config.lock().unwrap();
+        let method = config.valley_detection.clone();
+
+        let spectrum = if let Some(spectrum) = (*spectrum).as_mut() {
+            spectrum
+        } else {
+            return;
+        };
+
+        let valleys = spectrum.get_valleys(method);
+        let timestamp = Local::now().timestamp_millis();
+        let valleys = valleys
+            .iter()
+            .map(|valley| TimedEntry {
+                value: valley.wavelength,
+                timestamp,
+            })
+            .collect::<Vec<TimedEntry>>();
+
+        let mut valley_series = self.valleys_series.lock().unwrap();
+        valley_series.push_batch(&valleys);
+    }
+
+    pub fn get_valley_time_series_paths(&self, svg_limits: (u32, u32)) -> Vec<String> {
+        // MARK Stopped here. Next step will be to isolate the spectrum bezier utilities
+        // to use in here
+        // Also, we need to see how the time will be translated to graph coordinates
+        let graph_limits = self.get_limits(0.0);
+        if let Some(graph_limits) = graph_limits {
+            let valley_series = self.valleys_series.lock().unwrap();
+            valley_series.to_path(svg_limits, &graph_limits)
+        } else {
+            vec![]
+        }
+        // vec![
+        //     "M 10 10 H 90 V 90 H 10 L 10 10".to_string(),
+        //     "M 90 90 H 190 V 190 H 90 L 90 90".to_string(),
+        // ]
+    }
+}
+
 // Region: Loggers -------------------------------------------------------------
 
 impl SpectrumHandler {
@@ -588,6 +642,7 @@ pub fn new_spectrum_handler(config: HandlerConfig, log_sender: SyncSender<Log>) 
         last_spectrum: Arc::new(Mutex::new(None)),
         frozen_spectra: Mutex::new(vec![]),
         shadow_spectra: Mutex::new(vec![]),
+        valleys_series: Mutex::new(TimeSeries::empty()),
         unread_spectrum: Arc::new(AtomicBool::new(false)),
         spectrum_limits: Mutex::new(None),
         log_sender,

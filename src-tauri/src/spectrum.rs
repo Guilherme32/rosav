@@ -9,12 +9,12 @@ use std::fmt;
 use std::path::Path;
 
 use find_peaks::PeakFinder;
-use itertools::Itertools;
-
 use nalgebra::DVector;
 use std::ops::Range;
 use varpro::prelude::*;
 use varpro::solvers::levmar::{LevMarProblemBuilder, LevMarSolver};
+
+use crate::svg_utils::*;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SpectrumValue {
@@ -75,49 +75,6 @@ impl fmt::Display for Spectrum {
         }
         Ok(())
     }
-}
-
-fn convert_point(
-    graph_limits: &Limits,
-    svg_limits: &(f64, f64),
-    og_point: &SpectrumValue,
-) -> (f64, f64) {
-    let limits_pwr = (graph_limits.power.1, graph_limits.power.0); // Invert because svg coords
-    let limits_wl = graph_limits.wavelength;
-
-    let x = (og_point.wavelength - limits_wl.0) / (limits_wl.1 - limits_wl.0);
-    let x = x * svg_limits.0;
-
-    let y = (og_point.power - limits_pwr.0) / (limits_pwr.1 - limits_pwr.0);
-    let y = y * svg_limits.1;
-
-    (x, y)
-}
-
-fn bezier_point(
-    previous: (f64, f64),
-    start: (f64, f64),
-    end: (f64, f64),
-    next: (f64, f64),
-) -> String {
-    let smoothing = 0.3;
-
-    let start_vector = (end.0 - previous.0, end.1 - previous.1);
-    let start_control = (
-        start.0 + start_vector.0 * smoothing,
-        start.1 + start_vector.1 * smoothing,
-    );
-
-    let end_vector = (start.0 - next.0, start.1 - next.1);
-    let end_control = (
-        end.0 + end_vector.0 * smoothing,
-        end.1 + end_vector.1 * smoothing,
-    );
-
-    format!(
-        "C {:.2},{:.2} {:.2},{:.2}, {:.2},{:.2} ",
-        start_control.0, start_control.1, end_control.0, end_control.1, end.0, end.1
-    )
 }
 
 impl Spectrum {
@@ -183,29 +140,17 @@ impl Spectrum {
     }
 
     pub fn to_path(&self, svg_limits: (u32, u32), graph_limits: &Limits) -> String {
-        let svg_limits = (svg_limits.0 as f64 - 40.0, svg_limits.1 as f64 - 16.6);
-
-        if self.values.is_empty() {
-            return "".to_string();
-        }
-
-        let cvt = |point| convert_point(graph_limits, &svg_limits, point);
-        let start = cvt(&self.values[0]);
-        let start = format!("M {:.2},{:.2} ", start.0, start.1);
-
-        let last_entry = self.values.last().unwrap(); // The size is checked above
-
-        let path = &self
+        let graph_limits = GraphLimits {
+            x: graph_limits.wavelength,
+            y: graph_limits.power,
+        };
+        let points: Vec<(f64, f64)> = self
             .values
             .iter()
-            .chain((0..3).map(|_| last_entry)) // Without this the end is cropped
-            .map(cvt)
-            .tuple_windows() // Cropped because of the window
-            .map(|(a, b, c, d)| bezier_point(a, b, c, d))
-            .collect::<String>();
-        let path = format!("{start}{path}");
+            .map(|value| (value.wavelength, value.power))
+            .collect();
 
-        path
+        bezier_path(&points, svg_limits, &graph_limits)
     }
 
     pub fn get_limits(&self) -> Limits {
@@ -255,7 +200,7 @@ impl Spectrum {
 }
 
 impl Spectrum {
-    pub fn get_valleys(&mut self, method: CriticalDetection) -> Option<&Vec<SpectrumValue>> {
+    pub fn find_valleys(&mut self, method: CriticalDetection) -> Option<&Vec<SpectrumValue>> {
         match method {
             CriticalDetection::None => None,
             CriticalDetection::Simple { prominence } => {
@@ -376,6 +321,20 @@ impl Spectrum {
         }
     }
 
+    pub fn get_valleys(&mut self, method: CriticalDetection) -> Vec<SpectrumValue> {
+        let valleys_option = if method == self.info.valley_detection {
+            self.info.valleys.as_ref()
+        } else {
+            self.find_valleys(method)
+        };
+
+        if let Some(valleys) = valleys_option {
+            valleys.clone()
+        } else {
+            vec![]
+        }
+    }
+
     pub fn get_valleys_points(
         &mut self,
         svg_limits: (u32, u32),
@@ -383,21 +342,17 @@ impl Spectrum {
         method: CriticalDetection,
     ) -> Vec<(f64, f64)> {
         let svg_limits = (svg_limits.0 as f64 - 40.0, svg_limits.1 as f64 - 16.6);
-
-        let valleys_option = if method == self.info.valley_detection {
-            self.info.valleys.as_ref()
-        } else {
-            self.get_valleys(method)
+        let graph_limits = GraphLimits {
+            x: graph_limits.wavelength,
+            y: graph_limits.power,
         };
 
-        valleys_option
-            .map(|valleys| {
-                valleys
-                    .iter()
-                    .map(|valley| convert_point(graph_limits, &svg_limits, valley))
-                    .collect()
-            })
-            .unwrap_or(vec![])
+        let valleys = self.get_valleys(method);
+        valleys
+            .iter()
+            .map(|valley| (valley.wavelength, valley.power))
+            .map(|valley| convert_point(&graph_limits, &svg_limits, &valley))
+            .collect()
     }
 
     pub fn get_peaks_points(
@@ -407,6 +362,10 @@ impl Spectrum {
         method: CriticalDetection,
     ) -> Vec<(f64, f64)> {
         let svg_limits = (svg_limits.0 as f64 - 40.0, svg_limits.1 as f64 - 16.6);
+        let graph_limits = GraphLimits {
+            x: graph_limits.wavelength,
+            y: graph_limits.power,
+        };
 
         let peaks_option = if method == self.info.peak_detection {
             self.info.peaks.as_ref()
@@ -418,7 +377,8 @@ impl Spectrum {
             .map(|peaks| {
                 peaks
                     .iter()
-                    .map(|peak| convert_point(graph_limits, &svg_limits, peak))
+                    .map(|peak| (peak.wavelength, peak.power))
+                    .map(|peak| convert_point(&graph_limits, &svg_limits, &peak))
                     .collect()
             })
             .unwrap_or(vec![])

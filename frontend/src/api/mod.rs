@@ -248,6 +248,13 @@ pub async fn get_shadow_paths() -> Vec<String> {
     obj_rebuilt
 }
 
+pub async fn get_valley_time_series_paths() -> Vec<String> {
+    let from_back = invoke("get_valley_time_series_paths", to_value(&()).unwrap()).await;
+    let obj_rebuilt: Vec<String> = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}
+
 #[derive(Serialize, Deserialize)]
 struct SaveContinuousArgs {
     save: bool,

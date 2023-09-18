@@ -10,6 +10,7 @@ pub mod api;
 pub mod config;
 pub mod spectrum;
 pub mod spectrum_handler;
+pub mod svg_utils;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Log {

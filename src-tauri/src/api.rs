@@ -305,6 +305,16 @@ pub fn get_shadow_paths(
     handler.get_shadow_paths(get_svg_size(window))
 }
 
+// SubRegion: Time Series stuff -----------------------------------------------------
+
+#[tauri::command]
+pub fn get_valley_time_series_paths(
+    handler: tauri::State<SpectrumHandler>,
+    window: tauri::Window,
+) -> Vec<String> {
+    handler.get_valley_time_series_paths(get_svg_size(window))
+}
+
 // Region: Acquisitor functions ------------------------------------------------
 
 #[tauri::command]

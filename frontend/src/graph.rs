@@ -108,6 +108,8 @@ pub struct GraphProps<'a> {
     traces: &'a ReadSignal<Vec<Trace>>,
     shadow_paths: &'a ReadSignal<Vec<String>>,
     draw_shadow: &'a ReadSignal<bool>,
+    valley_time_series_paths: &'a ReadSignal<Vec<String>>,
+    draw_time_series: &'a ReadSignal<bool>,
     limits_change_flag: &'a Signal<bool>,
 }
 
@@ -273,6 +275,11 @@ pub fn Graph<'a, G: Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
                         x="2", y="2") {}
                 }
 
+                TimeSeries(
+                    valley_series_paths=props.valley_time_series_paths,
+                    draw_series=props.draw_time_series,
+                )
+
                 (draw_shadow(
                     cx,
                     &*props.shadow_paths.get(),
@@ -295,6 +302,40 @@ pub fn Graph<'a, G: Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
                 (*zoom_rect.get())
             }
         }
+    }
+}
+
+#[derive(Prop)]
+struct TimeSeriesProps<'a> {
+    valley_series_paths: &'a ReadSignal<Vec<String>>,
+    draw_series: &'a ReadSignal<bool>,
+}
+
+#[component]
+fn TimeSeries<'a, G: Html>(cx: Scope<'a>, props: TimeSeriesProps<'a>) -> View<G> {
+    // MARK TODO make the other series: peaks and means. Maybe make a group of
+    // Checkboxes to determine what is shown at the time series and put it in
+    // the config
+    view! { cx,
+        (if *props.draw_series.get() {
+            view! { cx,
+                Indexed(
+                    iterable=props.valley_series_paths,
+                    view = |cx, path| {
+                        view! { cx, path(
+                            d=path,
+                            fill="none",
+                            stroke-width="1",
+                            stroke="#A3D4D5",
+                            clip-path="url(#graph-clip)",
+                            ) {}
+                        }
+                    }
+                )
+            }
+        } else {
+            view! { cx, "" }
+        })
     }
 }
 

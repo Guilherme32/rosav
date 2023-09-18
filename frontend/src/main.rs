@@ -61,9 +61,14 @@ pub enum ActiveSide {
 #[component]
 fn Main<G: Html>(cx: Scope) -> View<G> {
     let traces = create_signal(cx, vec![first_trace()]);
+
     let shadow_paths_info = create_signal(cx, empty_trace_info());
     let shadow_paths = create_signal(cx, vec!["".to_string()]);
     let draw_shadow = create_signal(cx, false);
+
+    let time_series_paths_info = create_signal(cx, empty_trace_info());
+    let valley_time_series_paths = create_signal(cx, vec!["".to_string()]);
+    let draw_time_series = create_signal(cx, false);
 
     let svg_size = create_signal(cx, (0i32, 0i32));
 
@@ -89,6 +94,12 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
                 // Also update the shadow
                 shadow_paths_info.set(current_info.clone());
                 shadow_paths.set(get_shadow_paths().await);
+
+                // And the time series
+                if *draw_time_series.get() {
+                    time_series_paths_info.set(current_info.clone());
+                    valley_time_series_paths.set(get_valley_time_series_paths().await);
+                }
             }
         }
     });
@@ -120,11 +131,29 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
                 }
             }
 
+            // Also update the shadows
             if *shadow_paths_info.get() != current_info {
                 shadow_paths_info.set(current_info.clone());
                 shadow_paths.set(get_shadow_paths().await);
             };
+
             svg_size.set(new_svg_size);
+
+            // And the time series
+            if (*draw_time_series.get()) && (*time_series_paths_info.get() != current_info) {
+                time_series_paths_info.set(current_info.clone());
+                valley_time_series_paths.set(get_valley_time_series_paths().await);
+            };
+        }
+    });
+
+    // Update time series when activated
+    create_effect(cx, move || {
+        if *draw_time_series.get() {
+            spawn_local_scoped(cx, async move {
+                time_series_paths_info.set(get_trace_info().await);
+                valley_time_series_paths.set(get_valley_time_series_paths().await);
+            });
         }
     });
 
@@ -149,7 +178,8 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
                 saving=saving,
                 active_side=active_side,
                 limits_change_flag=limits_change_flag,
-                draw_shadow=draw_shadow
+                draw_shadow=draw_shadow,
+                draw_time_series=draw_time_series,
             )
 
             div(class="vertical-container") {
@@ -157,8 +187,10 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
                     traces=traces,
                     svg_size=svg_size,
                     shadow_paths=shadow_paths,
+                    valley_time_series_paths=valley_time_series_paths,
                     limits_change_flag=limits_change_flag,
-                    draw_shadow=draw_shadow
+                    draw_shadow=draw_shadow,
+                    draw_time_series=draw_time_series,
                 )
 
                 LowerBar(
