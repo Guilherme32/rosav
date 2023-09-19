@@ -67,7 +67,7 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
     let draw_shadow = create_signal(cx, false);
 
     let time_series_paths_info = create_signal(cx, empty_trace_info());
-    let valley_time_series_paths = create_signal(cx, vec!["".to_string()]);
+    let time_series_paths = create_signal(cx, TimeSeriesGroupPaths::empty());
     let draw_time_series = create_signal(cx, false);
 
     let svg_size = create_signal(cx, (0i32, 0i32));
@@ -98,7 +98,7 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
                 // And the time series
                 if *draw_time_series.get() {
                     time_series_paths_info.set(current_info.clone());
-                    valley_time_series_paths.set(get_valley_time_series_paths().await);
+                    time_series_paths.set(get_time_series_paths().await);
                 }
             }
         }
@@ -142,7 +142,7 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
             // And the time series
             if (*draw_time_series.get()) && (*time_series_paths_info.get() != current_info) {
                 time_series_paths_info.set(current_info.clone());
-                valley_time_series_paths.set(get_valley_time_series_paths().await);
+                time_series_paths.set(get_time_series_paths().await);
             };
         }
     });
@@ -152,7 +152,7 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
         if *draw_time_series.get() {
             spawn_local_scoped(cx, async move {
                 time_series_paths_info.set(get_trace_info().await);
-                valley_time_series_paths.set(get_valley_time_series_paths().await);
+                time_series_paths.set(get_time_series_paths().await);
             });
         }
     });
@@ -187,7 +187,7 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
                     traces=traces,
                     svg_size=svg_size,
                     shadow_paths=shadow_paths,
-                    valley_time_series_paths=valley_time_series_paths,
+                    time_series_paths=time_series_paths,
                     limits_change_flag=limits_change_flag,
                     draw_shadow=draw_shadow,
                     draw_time_series=draw_time_series,

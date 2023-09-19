@@ -54,7 +54,7 @@ pub fn new_imon(config: ImonConfig, log_sender: SyncSender<Log>) -> Imon {
 pub fn default_config() -> ImonConfig {
     ImonConfig {
         exposure_ms: 0.01,
-        read_delay_ms: 100,
+        read_delay_ms: 1000,
         multisampling: 32,
     }
 }

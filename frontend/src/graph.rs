@@ -108,7 +108,7 @@ pub struct GraphProps<'a> {
     traces: &'a ReadSignal<Vec<Trace>>,
     shadow_paths: &'a ReadSignal<Vec<String>>,
     draw_shadow: &'a ReadSignal<bool>,
-    valley_time_series_paths: &'a ReadSignal<Vec<String>>,
+    time_series_paths: &'a ReadSignal<TimeSeriesGroupPaths>,
     draw_time_series: &'a ReadSignal<bool>,
     limits_change_flag: &'a Signal<bool>,
 }
@@ -267,7 +267,11 @@ pub fn Graph<'a, G: Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
                 width=props.svg_size.get().0,
                 height=props.svg_size.get().1)
             {
-                GraphFrame(svg_size=props.svg_size)
+                GraphFrame(
+                    svg_size=props.svg_size,
+                    draw_time_series=props.draw_time_series
+                )
+
                 clipPath(id="graph-clip") {
                     rect(
                         width=(props.svg_size.get().0 - 44),
@@ -276,7 +280,7 @@ pub fn Graph<'a, G: Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
                 }
 
                 TimeSeries(
-                    valley_series_paths=props.valley_time_series_paths,
+                    series_paths=props.time_series_paths,
                     draw_series=props.draw_time_series,
                 )
 
@@ -307,7 +311,7 @@ pub fn Graph<'a, G: Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
 
 #[derive(Prop)]
 struct TimeSeriesProps<'a> {
-    valley_series_paths: &'a ReadSignal<Vec<String>>,
+    series_paths: &'a ReadSignal<TimeSeriesGroupPaths>,
     draw_series: &'a ReadSignal<bool>,
 }
 
@@ -316,17 +320,93 @@ fn TimeSeries<'a, G: Html>(cx: Scope<'a>, props: TimeSeriesProps<'a>) -> View<G>
     // MARK TODO make the other series: peaks and means. Maybe make a group of
     // Checkboxes to determine what is shown at the time series and put it in
     // the config
+    // Also choose some suitable colors for the peaks
+    let valleys = create_memo(cx, || {
+        let series = props.series_paths.get().valleys.clone();
+        if series.is_empty() {
+            vec!["".to_string()]
+        } else {
+            series
+        }
+    });
+    let valley_means = create_memo(cx, || {
+        let series = props.series_paths.get().valley_means.clone();
+        if series.is_empty() {
+            vec!["".to_string()]
+        } else {
+            series
+        }
+    });
+    let peaks = create_memo(cx, || {
+        let series = props.series_paths.get().peaks.clone();
+        if series.is_empty() {
+            vec!["".to_string()]
+        } else {
+            series
+        }
+    });
+    let peak_means = create_memo(cx, || {
+        let series = props.series_paths.get().peak_means.clone();
+        if series.is_empty() {
+            vec!["".to_string()]
+        } else {
+            series
+        }
+    });
+
     view! { cx,
         (if *props.draw_series.get() {
             view! { cx,
                 Indexed(
-                    iterable=props.valley_series_paths,
+                    iterable=valleys,
                     view = |cx, path| {
                         view! { cx, path(
                             d=path,
                             fill="none",
                             stroke-width="1",
                             stroke="#A3D4D5",
+                            clip-path="url(#graph-clip)",
+                            ) {}
+                        }
+                    }
+                )
+
+                Indexed(
+                    iterable=valley_means,
+                    view = |cx, path| {
+                        view! { cx, path(
+                            d=path,
+                            fill="none",
+                            stroke-width="3",
+                            stroke="#A3D4D5",
+                            clip-path="url(#graph-clip)",
+                            ) {}
+                        }
+                    }
+                )
+
+                Indexed(
+                    iterable=peaks,
+                    view = |cx, path| {
+                        view! { cx, path(
+                            d=path,
+                            fill="none",
+                            stroke-width="1",
+                            stroke="#03D4D5",
+                            clip-path="url(#graph-clip)",
+                            ) {}
+                        }
+                    }
+                )
+
+                Indexed(
+                    iterable=peak_means,
+                    view = |cx, path| {
+                        view! { cx, path(
+                            d=path,
+                            fill="none",
+                            stroke-width="3",
+                            stroke="#03D4D5",
                             clip-path="url(#graph-clip)",
                             ) {}
                         }
@@ -366,6 +446,7 @@ fn draw_markers<G: Html>(cx: Scope, trace: Trace) -> View<G> {
 #[derive(Prop)]
 struct FrameProps<'a> {
     svg_size: &'a ReadSignal<(i32, i32)>,
+    draw_time_series: &'a ReadSignal<bool>,
 }
 
 #[component]
@@ -413,6 +494,12 @@ fn GraphFrame<'a, G: Html>(cx: Scope<'a>, props: FrameProps<'a>) -> View<G> {
             .iter()
             .map(|y| format!("M 1,{} L {},{}", y, (graph_size.get()).0 - 1, y))
             .collect::<Vec<String>>()
+    });
+
+    let total_time = 5 * 60;
+    let time_div_label = create_memo(cx, move || {
+        let scale = total_time / (n_divs.get()).1;
+        format!("󰹹 {} s/div", scale)
     });
 
     view! { cx,
@@ -479,6 +566,26 @@ fn GraphFrame<'a, G: Html>(cx: Scope<'a>, props: FrameProps<'a>) -> View<G> {
             font-size="0.75rem",
             fill="#938056"
         ) { "(dB)" }
+
+        (if *props.draw_time_series.get() {
+            view! { cx,
+                text(
+                    x=5,
+                    y=15,
+                    font-size="0.75rem",
+                    fill="#938056"
+                ) { "Série Temp." }
+
+                text(
+                    x=5,
+                    y=30,
+                    font-size="0.75rem",
+                    fill="#938056"
+                ) { (*time_div_label.get()) }
+                }
+        } else {
+            view! { cx, "" }
+        })
     }
 }
 

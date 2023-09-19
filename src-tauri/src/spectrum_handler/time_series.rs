@@ -1,12 +1,14 @@
 use chrono::Local;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashSet, VecDeque};
 
+use super::TimeSeriesConfig;
 use crate::spectrum::Limits;
 use crate::svg_utils::*;
 
-const MAX_TIME: i64 = 30 * 60 * 1000;
-const CLEAN_THRESH: u64 = 100;
-const BAD_SCORE_THRESH: f64 = 25.0;
+const MAX_TIME: i64 = 10 * 60 * 1000;
+const CLEAN_THRESH: u64 = 1000;
+const BAD_SCORE_THRESH: f64 = 9.0;
 
 #[derive(Debug)]
 pub struct Sequence<T> {
@@ -45,6 +47,7 @@ impl TimedEntry {
         }
     }
 }
+
 #[derive(Debug)]
 pub struct TimeSeries {
     pub sequences: Vec<Sequence<TimedEntry>>,
@@ -385,5 +388,81 @@ impl TimeSeries {
                 bezier_path(&points, svg_limits, &graph_limits)
             })
             .collect()
+    }
+}
+
+#[derive(Debug)]
+pub struct TimeSeriesGroup {
+    pub valleys: TimeSeries,
+    pub valley_means: TimeSeries,
+    pub peaks: TimeSeries,
+    pub peak_means: TimeSeries,
+}
+
+impl TimeSeriesGroup {
+    pub fn empty() -> TimeSeriesGroup {
+        TimeSeriesGroup {
+            valleys: TimeSeries::empty(),
+            valley_means: TimeSeries::empty(),
+            peaks: TimeSeries::empty(),
+            peak_means: TimeSeries::empty(),
+        }
+    }
+
+    pub fn to_path(
+        &self,
+        svg_limits: (u32, u32),
+        graph_limits: &Limits,
+        config: &TimeSeriesConfig,
+    ) -> TimeSeriesGroupPaths {
+        let valleys = if config.draw_valleys {
+            self.valleys.to_path(svg_limits, graph_limits)
+        } else {
+            vec![]
+        };
+
+        let valley_means = if config.draw_valley_means {
+            self.valley_means.to_path(svg_limits, graph_limits)
+        } else {
+            vec![]
+        };
+
+        let peaks = if config.draw_peaks {
+            self.peaks.to_path(svg_limits, graph_limits)
+        } else {
+            vec![]
+        };
+
+        let peak_means = if config.draw_peak_means {
+            self.peak_means.to_path(svg_limits, graph_limits)
+        } else {
+            vec![]
+        };
+
+        TimeSeriesGroupPaths {
+            valleys,
+            valley_means,
+            peaks,
+            peak_means,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TimeSeriesGroupPaths {
+    pub valleys: Vec<String>,
+    pub valley_means: Vec<String>,
+    pub peaks: Vec<String>,
+    pub peak_means: Vec<String>,
+}
+
+impl TimeSeriesGroupPaths {
+    pub fn empty() -> TimeSeriesGroupPaths {
+        TimeSeriesGroupPaths {
+            valleys: vec![],
+            valley_means: vec![],
+            peaks: vec![],
+            peak_means: vec![],
+        }
     }
 }

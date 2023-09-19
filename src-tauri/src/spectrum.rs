@@ -212,7 +212,7 @@ impl Spectrum {
         }
     }
 
-    pub fn get_peaks(&mut self, method: CriticalDetection) -> Option<&Vec<SpectrumValue>> {
+    pub fn find_peaks(&mut self, method: CriticalDetection) -> Option<&Vec<SpectrumValue>> {
         match method {
             CriticalDetection::None => None,
             CriticalDetection::Simple { prominence } => {
@@ -355,6 +355,20 @@ impl Spectrum {
             .collect()
     }
 
+    pub fn get_peaks(&mut self, method: CriticalDetection) -> Vec<SpectrumValue> {
+        let peaks_option = if method == self.info.peak_detection {
+            self.info.peaks.as_ref()
+        } else {
+            self.find_peaks(method)
+        };
+
+        if let Some(peaks) = peaks_option {
+            peaks.clone()
+        } else {
+            vec![]
+        }
+    }
+
     pub fn get_peaks_points(
         &mut self,
         svg_limits: (u32, u32),
@@ -367,21 +381,12 @@ impl Spectrum {
             y: graph_limits.power,
         };
 
-        let peaks_option = if method == self.info.peak_detection {
-            self.info.peaks.as_ref()
-        } else {
-            self.get_peaks(method)
-        };
-
-        peaks_option
-            .map(|peaks| {
-                peaks
-                    .iter()
-                    .map(|peak| (peak.wavelength, peak.power))
-                    .map(|peak| convert_point(&graph_limits, &svg_limits, &peak))
-                    .collect()
-            })
-            .unwrap_or(vec![])
+        let peaks = self.get_peaks(method);
+        peaks
+            .iter()
+            .map(|peak| (peak.wavelength, peak.power))
+            .map(|peak| convert_point(&graph_limits, &svg_limits, &peak))
+            .collect()
     }
 }
 

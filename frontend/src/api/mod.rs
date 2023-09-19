@@ -44,11 +44,22 @@ pub enum ConnectionState {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-#[serde(tag = "type")]
+#[serde(tag = "type")] // Better for enums with struct types
 pub enum CriticalDetection {
     None,
     Simple { prominence: f64 },
     Lorentz { prominence: f64 },
+}
+
+// MARK Stopped here. We need to actually implement the config in the rest of
+// the front and also in the backend
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct TimeSeriesConfig {
+    pub draw_valleys: bool,
+    pub draw_valley_means: bool,
+    pub draw_peaks: bool,
+    pub draw_peak_means: bool,
+    pub total_time: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -60,6 +71,7 @@ pub struct HandlerConfig {
     pub valley_detection: CriticalDetection,
     pub peak_detection: CriticalDetection,
     pub shadow_length: usize,
+    pub time_series_config: TimeSeriesConfig,
 }
 
 pub fn empty_handler_config() -> HandlerConfig {
@@ -71,6 +83,32 @@ pub fn empty_handler_config() -> HandlerConfig {
         valley_detection: CriticalDetection::None,
         peak_detection: CriticalDetection::None,
         shadow_length: 0,
+        time_series_config: TimeSeriesConfig {
+            draw_valleys: false,
+            draw_valley_means: false,
+            draw_peaks: false,
+            draw_peak_means: false,
+            total_time: 0,
+        },
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TimeSeriesGroupPaths {
+    pub valleys: Vec<String>,
+    pub valley_means: Vec<String>,
+    pub peaks: Vec<String>,
+    pub peak_means: Vec<String>,
+}
+
+impl TimeSeriesGroupPaths {
+    pub fn empty() -> TimeSeriesGroupPaths {
+        TimeSeriesGroupPaths {
+            valleys: vec![],
+            valley_means: vec![],
+            peaks: vec![],
+            peak_means: vec![],
+        }
     }
 }
 
@@ -248,9 +286,9 @@ pub async fn get_shadow_paths() -> Vec<String> {
     obj_rebuilt
 }
 
-pub async fn get_valley_time_series_paths() -> Vec<String> {
-    let from_back = invoke("get_valley_time_series_paths", to_value(&()).unwrap()).await;
-    let obj_rebuilt: Vec<String> = from_value(from_back).unwrap();
+pub async fn get_time_series_paths() -> TimeSeriesGroupPaths {
+    let from_back = invoke("get_time_series_paths", to_value(&()).unwrap()).await;
+    let obj_rebuilt: TimeSeriesGroupPaths = from_value(from_back).unwrap();
 
     obj_rebuilt
 }

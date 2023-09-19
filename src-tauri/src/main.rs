@@ -67,7 +67,7 @@ fn main() {
             save_continuous,
             get_saving,
             get_shadow_paths,
-            get_valley_time_series_paths,
+            get_time_series_paths,
             get_connection_state,
             connect_acquisitor,
             disconnect_acquisitor,

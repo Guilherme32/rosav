@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::{atomic, mpsc, Mutex};
 use tauri::api::dialog::{blocking, FileDialogBuilder};
 
+use crate::spectrum_handler::time_series::TimeSeriesGroupPaths;
 use crate::*;
 use spectrum::CriticalDetection;
 use spectrum_handler::{AcquisitorConfig, HandlerConfig, SpectrumHandler, State as HandlerState};
@@ -308,11 +309,11 @@ pub fn get_shadow_paths(
 // SubRegion: Time Series stuff -----------------------------------------------------
 
 #[tauri::command]
-pub fn get_valley_time_series_paths(
+pub fn get_time_series_paths(
     handler: tauri::State<SpectrumHandler>,
     window: tauri::Window,
-) -> Vec<String> {
-    handler.get_valley_time_series_paths(get_svg_size(window))
+) -> TimeSeriesGroupPaths {
+    handler.get_time_series_paths(get_svg_size(window))
 }
 
 // Region: Acquisitor functions ------------------------------------------------

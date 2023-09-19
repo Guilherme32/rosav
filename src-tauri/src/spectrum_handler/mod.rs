@@ -19,7 +19,7 @@ use crate::spectrum::*;
 pub mod acquisitors;
 pub mod time_series;
 
-use time_series::TimeSeries;
+use time_series::TimeSeriesGroup;
 
 use acquisitors::{
     file_reader::{FileReader, FileReaderConfig},
@@ -27,7 +27,16 @@ use acquisitors::{
     load_acquisitor,
 };
 
-use self::time_series::TimedEntry;
+use self::time_series::{TimeSeriesGroupPaths, TimedEntry};
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct TimeSeriesConfig {
+    pub draw_valleys: bool,
+    pub draw_valley_means: bool,
+    pub draw_peaks: bool,
+    pub draw_peak_means: bool,
+    pub total_time: u64,
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HandlerConfig {
@@ -38,6 +47,7 @@ pub struct HandlerConfig {
     pub valley_detection: CriticalDetection,
     pub peak_detection: CriticalDetection,
     pub shadow_length: usize,
+    pub time_series_config: TimeSeriesConfig,
 }
 
 #[derive(Debug)]
@@ -46,7 +56,7 @@ pub struct SpectrumHandler {
     pub last_spectrum: Arc<Mutex<Option<Spectrum>>>,
     pub frozen_spectra: Mutex<Vec<Spectrum>>,
     pub shadow_spectra: Mutex<Vec<Spectrum>>,
-    pub valleys_series: Mutex<TimeSeries>,
+    pub time_series_group: Mutex<TimeSeriesGroup>,
     pub unread_spectrum: Arc<AtomicBool>,
     pub spectrum_limits: Mutex<Option<Limits>>, // 'Natural' limits
     pub log_sender: SyncSender<Log>,
@@ -501,7 +511,8 @@ impl SpectrumHandler {
     fn update_time_series(&self) {
         let mut spectrum = self.last_spectrum.lock().unwrap();
         let config = self.config.lock().unwrap();
-        let method = config.valley_detection.clone();
+        let valley_method = config.valley_detection.clone();
+        let peak_method = config.peak_detection.clone();
 
         let spectrum = if let Some(spectrum) = (*spectrum).as_mut() {
             spectrum
@@ -509,35 +520,61 @@ impl SpectrumHandler {
             return;
         };
 
-        let valleys = spectrum.get_valleys(method);
-        let timestamp = Local::now().timestamp_millis();
-        let valleys = valleys
-            .iter()
-            .map(|valley| TimedEntry {
-                value: valley.wavelength,
-                timestamp,
-            })
-            .collect::<Vec<TimedEntry>>();
-
-        let mut valley_series = self.valleys_series.lock().unwrap();
-        valley_series.push_batch(&valleys);
-    }
-
-    pub fn get_valley_time_series_paths(&self, svg_limits: (u32, u32)) -> Vec<String> {
-        // MARK Stopped here. Next step will be to isolate the spectrum bezier utilities
-        // to use in here
-        // Also, we need to see how the time will be translated to graph coordinates
-        let graph_limits = self.get_limits(0.0);
-        if let Some(graph_limits) = graph_limits {
-            let valley_series = self.valleys_series.lock().unwrap();
-            valley_series.to_path(svg_limits, &graph_limits)
+        let valleys = spectrum.get_valleys(valley_method);
+        let valleys_mean = if !valleys.is_empty() {
+            vec![
+                valleys
+                    .iter()
+                    .fold(0.0, |acc, valley| acc + valley.wavelength)
+                    / valleys.len() as f64,
+            ]
         } else {
             vec![]
+        };
+
+        let peaks = spectrum.get_peaks(peak_method);
+        let peaks_mean = if !peaks.is_empty() {
+            vec![peaks.iter().fold(0.0, |acc, peak| acc + peak.wavelength) / peaks.len() as f64]
+        } else {
+            vec![]
+        };
+
+        let timestamp = Local::now().timestamp_millis();
+        let cvt_entry = |spec_value: &SpectrumValue| TimedEntry {
+            value: spec_value.wavelength,
+            timestamp,
+        };
+
+        let valleys = valleys.iter().map(cvt_entry).collect::<Vec<TimedEntry>>();
+        let valleys_mean = valleys_mean
+            .iter()
+            .map(|&value| TimedEntry { value, timestamp })
+            .collect::<Vec<TimedEntry>>();
+
+        let peaks = peaks.iter().map(cvt_entry).collect::<Vec<TimedEntry>>();
+        let peaks_mean = peaks_mean
+            .iter()
+            .map(|&value| TimedEntry { value, timestamp })
+            .collect::<Vec<TimedEntry>>();
+
+        let mut time_series = self.time_series_group.lock().unwrap();
+
+        time_series.valleys.push_batch(&valleys);
+        time_series.valley_means.push_batch(&valleys_mean);
+        time_series.peaks.push_batch(&peaks);
+        time_series.peak_means.push_batch(&peaks_mean);
+    }
+
+    pub fn get_time_series_paths(&self, svg_limits: (u32, u32)) -> TimeSeriesGroupPaths {
+        let graph_limits = self.get_limits(0.0);
+        if let Some(graph_limits) = graph_limits {
+            let time_series = self.time_series_group.lock().unwrap();
+            let config = self.config.lock().unwrap();
+
+            time_series.to_path(svg_limits, &graph_limits, &config.time_series_config)
+        } else {
+            TimeSeriesGroupPaths::empty()
         }
-        // vec![
-        //     "M 10 10 H 90 V 90 H 10 L 10 10".to_string(),
-        //     "M 90 90 H 190 V 190 H 90 L 90 90".to_string(),
-        // ]
     }
 }
 
@@ -568,6 +605,13 @@ pub fn default_config() -> HandlerConfig {
         valley_detection: CriticalDetection::Lorentz { prominence: 3.0 },
         peak_detection: CriticalDetection::None,
         shadow_length: 10,
+        time_series_config: TimeSeriesConfig {
+            draw_valleys: true,
+            draw_valley_means: false,
+            draw_peaks: false,
+            draw_peak_means: false,
+            total_time: 300,
+        },
     }
 }
 
@@ -642,7 +686,7 @@ pub fn new_spectrum_handler(config: HandlerConfig, log_sender: SyncSender<Log>) 
         last_spectrum: Arc::new(Mutex::new(None)),
         frozen_spectra: Mutex::new(vec![]),
         shadow_spectra: Mutex::new(vec![]),
-        valleys_series: Mutex::new(TimeSeries::empty()),
+        time_series_group: Mutex::new(TimeSeriesGroup::empty()),
         unread_spectrum: Arc::new(AtomicBool::new(false)),
         spectrum_limits: Mutex::new(None),
         log_sender,
