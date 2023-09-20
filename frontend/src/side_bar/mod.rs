@@ -666,14 +666,23 @@ async fn get_old_handler_config(signals: OldHandlerSignals<'_>) -> HandlerConfig
     _config
 }
 
+fn unfocus(event: rt::Event) {
+    blur();
+    event.prevent_default();
+}
+
 #[derive(Prop)]
 struct HandlerConfigProps<'a> {
     config: &'a Signal<HandlerConfig>,
     limits_change_flag: &'a Signal<bool>,
 }
 
+// HOOOOOLY CRAP this component got out of hand!
+// We need to break this down so we can actually read it
+// Also MARK TODO we need to add the time series time and check boxes
 #[component]
 fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>) -> View<G> {
+    // Init the signals -------------------------------------------------------
     let wl_min = create_signal(cx, String::new());
     let wl_max = create_signal(cx, String::new());
 
@@ -690,6 +699,7 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
 
     let acquisitor = create_signal(cx, String::new());
 
+    // Fetch the old config ---------------------------------------------------
     spawn_local_scoped(cx, async move {
         let old_handler_signals = OldHandlerSignals {
             wl_min,
@@ -708,11 +718,7 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
         props.config.set(_config); // Update whole config
     });
 
-    let unfocus = move |event: rt::Event| {
-        blur();
-        event.prevent_default();
-    };
-
+    // Create the callbacks ---------------------------------------------------
     let update_save_path = move |_| {
         spawn_local_scoped(cx, async move {
             match pick_folder().await {
@@ -792,6 +798,7 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
         }
     };
 
+    // Create effects ---------------------------------------------------------
     create_effect(cx, move || {
         // Apply config when it is updated
         props.config.track();
@@ -827,6 +834,7 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
         });
     });
 
+    // Render it --------------------------------------------------------------
     view! { cx,
         form(class="side-container back config", on:submit=unfocus) {
             input(type="submit", style="display: none;")
@@ -895,9 +903,9 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
                     option(value="simple") { "Simples" }
                     option(value="lorentz") { "Lorentziana" }
                 }
-            }
 
-            div(class="element") {
+                p(class="spacer") {}
+
                 p { "Proeminência mínima:"}
                 p {
                     input(
@@ -920,9 +928,9 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
                     option(value="simple") { "Simples" }
                     option(value="lorentz") { "Lorentziana" }
                 }
-            }
 
-            div(class="element") {
+                p(class="spacer") {}
+
                 p { "Proeminência mínima:"}
                 p {
                     input(
@@ -934,8 +942,56 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
                 }
             }
 
+            // MARK Stopped in here. Did some preliminary styling. Now lets get
+            // the thing actually working
             div(class="element") {
-                p { "Tipo de aquisitor:" }            // TODO implementar mudança quando passar o outro aquisitor
+                p { "Série Temporal:"}
+                p (class="spacer") {}
+                p { "Desenhar: "}
+                p {
+                    label(class="check-container") {
+                        input(
+                            type="checkbox"
+                        ) {}
+                        span(class="checkbox") {}
+                        "Vales"
+                    }
+                    label(class="check-container") {
+                        input(
+                            type="checkbox"
+                        ) {}
+                        span(class="checkbox") {}
+                        "Médias V."
+                    }
+                }
+                p {
+                    label(class="check-container") {
+                        input(
+                            type="checkbox"
+                        ) {}
+                        span(class="checkbox") {}
+                        "Picos"
+                    }
+                    label(class="check-container") {
+                        input(
+                            type="checkbox"
+                        ) {}
+                        span(class="checkbox") {}
+                        "Médias P."
+                    }
+                }
+                p (class="spacer") {}
+                p {"Tempo total:"}
+                p {
+                    input(
+                        type="number"
+                    ) {}
+                    "(s)"
+                }
+            }
+
+            div(class="element") {
+                p { "Tipo de aquisitor:" }
                 select(
                     name="acquisitor",
                     bind:value=acquisitor,

@@ -1,23 +1,31 @@
 use sycamore::prelude::*;
 
-use crate::api::CriticalDetection;
+use crate::api::{CriticalDetection, TimeSeriesConfig};
 
 #[derive(Clone, PartialEq, Debug)]
-pub struct TraceInfo {
+pub struct DrawInfo {
     pub wavelength_limits: (f64, f64),
     pub power_limits: (f64, f64),
     pub svg_size: (i32, i32),
     pub valley_detection: CriticalDetection,
     pub peak_detection: CriticalDetection,
+    pub time_series_config: TimeSeriesConfig,
 }
 
-pub fn empty_trace_info() -> TraceInfo {
-    TraceInfo {
+pub fn empty_draw_info() -> DrawInfo {
+    DrawInfo {
         wavelength_limits: (0.0, 0.0),
         power_limits: (0.0, 0.0),
         svg_size: (0, 0),
         valley_detection: CriticalDetection::None,
         peak_detection: CriticalDetection::None,
+        time_series_config: TimeSeriesConfig {
+            draw_valleys: false,
+            draw_valley_means: false,
+            draw_peaks: false,
+            draw_peak_means: false,
+            total_time: 0,
+        },
     }
 }
 
@@ -33,7 +41,7 @@ pub struct Trace {
     pub peaks: Vec<(f64, f64)>,
     pub svg_path: String,
     pub freeze_time: Option<String>, // Se None não está congelado
-    pub drawn_info: TraceInfo,       // Stuff to check if it needs to be redrawn
+    pub drawn_info: DrawInfo,        // Stuff to check if it needs to be redrawn
 }
 
 pub fn new_trace(last_active: &Trace) -> Trace {
@@ -48,7 +56,7 @@ pub fn new_trace(last_active: &Trace) -> Trace {
         peaks: vec![],
         svg_path: String::new(),
         freeze_time: None,
-        drawn_info: empty_trace_info(),
+        drawn_info: empty_draw_info(),
     }
 }
 
@@ -64,7 +72,7 @@ pub fn first_trace() -> Trace {
         peaks: vec![],
         svg_path: String::new(),
         freeze_time: None,
-        drawn_info: empty_trace_info(),
+        drawn_info: empty_draw_info(),
     }
 }
 

@@ -317,10 +317,6 @@ struct TimeSeriesProps<'a> {
 
 #[component]
 fn TimeSeries<'a, G: Html>(cx: Scope<'a>, props: TimeSeriesProps<'a>) -> View<G> {
-    // MARK TODO make the other series: peaks and means. Maybe make a group of
-    // Checkboxes to determine what is shown at the time series and put it in
-    // the config
-    // Also choose some suitable colors for the peaks
     let valleys = create_memo(cx, || {
         let series = props.series_paths.get().valleys.clone();
         if series.is_empty() {
@@ -364,7 +360,7 @@ fn TimeSeries<'a, G: Html>(cx: Scope<'a>, props: TimeSeriesProps<'a>) -> View<G>
                             d=path,
                             fill="none",
                             stroke-width="1",
-                            stroke="#A3D4D5",
+                            stroke="#A3D4D5",  // Light blue
                             clip-path="url(#graph-clip)",
                             ) {}
                         }
@@ -378,7 +374,7 @@ fn TimeSeries<'a, G: Html>(cx: Scope<'a>, props: TimeSeriesProps<'a>) -> View<G>
                             d=path,
                             fill="none",
                             stroke-width="3",
-                            stroke="#A3D4D5",
+                            stroke="#A3D4D5",  // Light blue
                             clip-path="url(#graph-clip)",
                             ) {}
                         }
@@ -392,7 +388,7 @@ fn TimeSeries<'a, G: Html>(cx: Scope<'a>, props: TimeSeriesProps<'a>) -> View<G>
                             d=path,
                             fill="none",
                             stroke-width="1",
-                            stroke="#03D4D5",
+                            stroke="#FF5D62",  // peach red
                             clip-path="url(#graph-clip)",
                             ) {}
                         }
@@ -406,7 +402,7 @@ fn TimeSeries<'a, G: Html>(cx: Scope<'a>, props: TimeSeriesProps<'a>) -> View<G>
                             d=path,
                             fill="none",
                             stroke-width="3",
-                            stroke="#03D4D5",
+                            stroke="#FF5D62",  // peach red
                             clip-path="url(#graph-clip)",
                             ) {}
                         }

@@ -5,6 +5,7 @@ use std::sync::{atomic, mpsc, Mutex};
 use tauri::api::dialog::{blocking, FileDialogBuilder};
 
 use crate::spectrum_handler::time_series::TimeSeriesGroupPaths;
+use crate::spectrum_handler::TimeSeriesConfig;
 use crate::*;
 use spectrum::CriticalDetection;
 use spectrum_handler::{AcquisitorConfig, HandlerConfig, SpectrumHandler, State as HandlerState};
@@ -70,6 +71,11 @@ pub fn get_valley_detection(handler: tauri::State<SpectrumHandler>) -> CriticalD
 #[tauri::command]
 pub fn get_peak_detection(handler: tauri::State<SpectrumHandler>) -> CriticalDetection {
     handler.get_peak_detection()
+}
+
+#[tauri::command]
+pub fn get_time_series_config(handler: tauri::State<SpectrumHandler>) -> TimeSeriesConfig {
+    handler.get_time_series_config()
 }
 
 // Region: Graph / Plot / Spectrum related -------------------------------------

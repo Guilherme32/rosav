@@ -35,19 +35,21 @@ fn main() {
     })
 }
 
-async fn get_trace_info() -> TraceInfo {
+async fn get_trace_info() -> DrawInfo {
     let svg_size = get_svg_size().await;
     let wavelength_limits = get_wavelength_limits().await;
     let power_limits = get_power_limits().await;
     let valley_detection = get_valley_detection().await;
     let peak_detection = get_peak_detection().await;
+    let time_series_config = get_time_series_config().await;
 
-    TraceInfo {
+    DrawInfo {
         svg_size,
         wavelength_limits,
         power_limits,
         valley_detection,
         peak_detection,
+        time_series_config,
     }
 }
 
@@ -62,11 +64,11 @@ pub enum ActiveSide {
 fn Main<G: Html>(cx: Scope) -> View<G> {
     let traces = create_signal(cx, vec![first_trace()]);
 
-    let shadow_paths_info = create_signal(cx, empty_trace_info());
+    let shadow_paths_info = create_signal(cx, empty_draw_info());
     let shadow_paths = create_signal(cx, vec!["".to_string()]);
     let draw_shadow = create_signal(cx, false);
 
-    let time_series_paths_info = create_signal(cx, empty_trace_info());
+    let time_series_paths_info = create_signal(cx, empty_draw_info());
     let time_series_paths = create_signal(cx, TimeSeriesGroupPaths::empty());
     let draw_time_series = create_signal(cx, false);
 

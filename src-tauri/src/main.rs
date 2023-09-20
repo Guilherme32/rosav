@@ -57,6 +57,7 @@ fn main() {
             get_time,
             get_valley_detection,
             get_peak_detection,
+            get_time_series_config,
             freeze_spectrum,
             delete_frozen_spectrum,
             get_frozen_spectrum_path,

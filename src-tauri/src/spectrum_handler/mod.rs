@@ -291,6 +291,11 @@ impl SpectrumHandler {
         let config = self.config.lock().unwrap();
         config.peak_detection.clone()
     }
+
+    pub fn get_time_series_config(&self) -> TimeSeriesConfig {
+        let config = self.config.lock().unwrap();
+        config.time_series_config.clone()
+    }
 }
 
 // Region: Frozen stuff --------------------------------------------------------

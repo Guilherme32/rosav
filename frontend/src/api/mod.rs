@@ -218,6 +218,13 @@ pub async fn get_peak_detection() -> CriticalDetection {
     obj_rebuilt
 }
 
+pub async fn get_time_series_config() -> TimeSeriesConfig {
+    let from_back = invoke("get_time_series_config", to_value(&()).unwrap()).await;
+    let obj_rebuilt: TimeSeriesConfig = from_value(from_back).unwrap();
+
+    obj_rebuilt
+}
+
 pub async fn freeze_spectrum() {
     invoke("freeze_spectrum", to_value(&()).unwrap()).await;
 }

@@ -319,6 +319,10 @@ button:active {
 
 // Region Config ----------------------------------------------------------------------------------
 
+.spacer {
+  padding: 3px;
+}
+
 .config {
   font-size: 0.75rem;
   word-break: break-all;
@@ -359,6 +363,25 @@ button:active {
   border: 2px solid $main_back;
   margin-right: 5px;
   font-size: 0.85rem;
+}
+
+.config .check-container input {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.checkbox {
+  display: inline-block;
+  margin: 0px 10px 0px 10px;
+  height: 0.5rem;
+  width: 0.5rem;
+  border: 2px solid $main_back;
+  background-color: $border;
+}
+
+input:checked ~ .checkbox {
+  background-color: $text;
 }
 
 .config input:hover {
