@@ -169,8 +169,14 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
         }
     });
 
+    // Some interconnecting signals (a bit spaghetti, maybe TODO fix this?)
     let active_side = create_signal(cx, ActiveSide::Traces);
     let limits_change_flag = create_signal(cx, false);
+    let series_total_time = create_signal(cx, 0);
+    spawn_local_scoped(cx, async move {
+        let config = get_handler_config().await;
+        series_total_time.set(config.time_series_config.total_time as i32);
+    });
 
     view! { cx,
         div(class="horizontal-container") {
@@ -182,6 +188,7 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
                 limits_change_flag=limits_change_flag,
                 draw_shadow=draw_shadow,
                 draw_time_series=draw_time_series,
+                series_total_time=series_total_time
             )
 
             div(class="vertical-container") {
@@ -193,6 +200,7 @@ fn Main<G: Html>(cx: Scope) -> View<G> {
                     limits_change_flag=limits_change_flag,
                     draw_shadow=draw_shadow,
                     draw_time_series=draw_time_series,
+                    series_total_time=series_total_time
                 )
 
                 LowerBar(

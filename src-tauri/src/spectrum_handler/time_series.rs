@@ -369,10 +369,15 @@ impl TimeSeries {
             .retain(|sequence| !sequence.values.is_empty());
     }
 
-    pub fn to_path(&self, svg_limits: (u32, u32), graph_limits: &Limits) -> Vec<String> {
+    pub fn to_path(
+        &self,
+        svg_limits: (u32, u32),
+        graph_limits: &Limits,
+        total_time: i64,
+    ) -> Vec<String> {
         let graph_limits = GraphLimits {
             x: graph_limits.wavelength,
-            y: (-1000.0 * 60.0 * 5.0, 0.0), // 5 mins in ms
+            y: (-1000.0 * total_time as f64, 0.0),
         };
         let now = self.newest_time;
 
@@ -416,25 +421,29 @@ impl TimeSeriesGroup {
         config: &TimeSeriesConfig,
     ) -> TimeSeriesGroupPaths {
         let valleys = if config.draw_valleys {
-            self.valleys.to_path(svg_limits, graph_limits)
+            self.valleys
+                .to_path(svg_limits, graph_limits, config.total_time)
         } else {
             vec![]
         };
 
         let valley_means = if config.draw_valley_means {
-            self.valley_means.to_path(svg_limits, graph_limits)
+            self.valley_means
+                .to_path(svg_limits, graph_limits, config.total_time)
         } else {
             vec![]
         };
 
         let peaks = if config.draw_peaks {
-            self.peaks.to_path(svg_limits, graph_limits)
+            self.peaks
+                .to_path(svg_limits, graph_limits, config.total_time)
         } else {
             vec![]
         };
 
         let peak_means = if config.draw_peak_means {
-            self.peak_means.to_path(svg_limits, graph_limits)
+            self.peak_means
+                .to_path(svg_limits, graph_limits, config.total_time)
         } else {
             vec![]
         };

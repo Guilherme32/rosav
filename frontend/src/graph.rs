@@ -111,6 +111,7 @@ pub struct GraphProps<'a> {
     time_series_paths: &'a ReadSignal<TimeSeriesGroupPaths>,
     draw_time_series: &'a ReadSignal<bool>,
     limits_change_flag: &'a Signal<bool>,
+    series_total_time: &'a ReadSignal<i32>,
 }
 
 #[component]
@@ -269,7 +270,8 @@ pub fn Graph<'a, G: Html>(cx: Scope<'a>, props: GraphProps<'a>) -> View<G> {
             {
                 GraphFrame(
                     svg_size=props.svg_size,
-                    draw_time_series=props.draw_time_series
+                    draw_time_series=props.draw_time_series,
+                    series_total_time=props.series_total_time
                 )
 
                 clipPath(id="graph-clip") {
@@ -443,6 +445,7 @@ fn draw_markers<G: Html>(cx: Scope, trace: Trace) -> View<G> {
 struct FrameProps<'a> {
     svg_size: &'a ReadSignal<(i32, i32)>,
     draw_time_series: &'a ReadSignal<bool>,
+    series_total_time: &'a ReadSignal<i32>,
 }
 
 #[component]
@@ -492,10 +495,9 @@ fn GraphFrame<'a, G: Html>(cx: Scope<'a>, props: FrameProps<'a>) -> View<G> {
             .collect::<Vec<String>>()
     });
 
-    let total_time = 5 * 60;
     let time_div_label = create_memo(cx, move || {
-        let scale = total_time / (n_divs.get()).1;
-        format!("󰹹 {} s/div", scale)
+        let scale = (*props.series_total_time.get() as f32) / ((n_divs.get()).1 as f32);
+        format!("󰹹 {:.2} s/div", scale)
     });
 
     view! { cx,

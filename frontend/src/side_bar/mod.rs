@@ -19,6 +19,7 @@ pub struct SideBarProps<'a> {
     limits_change_flag: &'a Signal<bool>,
     draw_shadow: &'a Signal<bool>,
     draw_time_series: &'a Signal<bool>,
+    series_total_time: &'a Signal<i32>,
 }
 
 #[component]
@@ -37,8 +38,11 @@ pub fn SideBar<'a, G: Html>(cx: Scope<'a>, props: SideBarProps<'a>) -> View<G> {
                     },
                 ActiveSide::Config =>
                     view! { cx,
-                        ConfigWindow(limits_change_flag=props.limits_change_flag)
-                    }
+                        ConfigWindow(
+                        limits_change_flag=props.limits_change_flag,
+                        series_total_time=props.series_total_time
+                    )
+                }
             })
             LogSpace {}
         }
@@ -565,6 +569,7 @@ fn LogSpace<G: Html>(cx: Scope) -> View<G> {
 #[derive(Prop)]
 struct ConfigWindowProps<'a> {
     limits_change_flag: &'a Signal<bool>,
+    series_total_time: &'a Signal<i32>,
 }
 
 #[component]
@@ -575,7 +580,11 @@ fn ConfigWindow<'a, G: Html>(cx: Scope<'a>, props: ConfigWindowProps<'a>) -> Vie
         div(class="side-bar-main") {
             p(class="title") { "Configurações" }
             div(class="side-container back config") {
-                RenderHandlerConfig (config=handler_config, limits_change_flag=props.limits_change_flag)
+                RenderHandlerConfig(
+                    config=handler_config,
+                    limits_change_flag=props.limits_change_flag,
+                    global_series_total_time=props.series_total_time
+                )
                 RenderAcquisitorConfig (handler_config=handler_config)
             }
         }
@@ -598,6 +607,11 @@ struct OldHandlerSignals<'a> {
     peak_detection: &'a Signal<String>,
     shadow_length: &'a Signal<String>,
     acquisitor: &'a Signal<String>,
+    series_draw_valleys: &'a Signal<bool>,
+    series_draw_valley_means: &'a Signal<bool>,
+    series_draw_peaks: &'a Signal<bool>,
+    series_draw_peak_means: &'a Signal<bool>,
+    series_total_time: &'a Signal<String>,
 }
 
 async fn get_old_handler_config(signals: OldHandlerSignals<'_>) -> HandlerConfig {
@@ -658,6 +672,22 @@ async fn get_old_handler_config(signals: OldHandlerSignals<'_>) -> HandlerConfig
 
     signals.shadow_length.set(_config.shadow_length.to_string());
 
+    signals
+        .series_draw_valleys
+        .set(_config.time_series_config.draw_valleys);
+    signals
+        .series_draw_valley_means
+        .set(_config.time_series_config.draw_valley_means);
+    signals
+        .series_draw_peaks
+        .set(_config.time_series_config.draw_peaks);
+    signals
+        .series_draw_peak_means
+        .set(_config.time_series_config.draw_peak_means);
+    signals
+        .series_total_time
+        .set(_config.time_series_config.total_time.to_string());
+
     match _config.acquisitor {
         AcquisitorSimple::FileReader => signals.acquisitor.set("file_reader".to_string()),
         AcquisitorSimple::Imon => signals.acquisitor.set("imon".to_string()),
@@ -675,11 +705,11 @@ fn unfocus(event: rt::Event) {
 struct HandlerConfigProps<'a> {
     config: &'a Signal<HandlerConfig>,
     limits_change_flag: &'a Signal<bool>,
+    global_series_total_time: &'a Signal<i32>,
 }
 
 // HOOOOOLY CRAP this component got out of hand!
 // We need to break this down so we can actually read it
-// Also MARK TODO we need to add the time series time and check boxes
 #[component]
 fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>) -> View<G> {
     // Init the signals -------------------------------------------------------
@@ -694,6 +724,12 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
 
     let peak_prominence = create_signal(cx, String::new());
     let peak_detection = create_signal(cx, String::new());
+
+    let series_draw_valleys = create_signal(cx, false);
+    let series_draw_valley_means = create_signal(cx, false);
+    let series_draw_peaks = create_signal(cx, false);
+    let series_draw_peak_means = create_signal(cx, false);
+    let series_total_time = create_signal(cx, String::new());
 
     let shadow_length = create_signal(cx, String::new());
 
@@ -712,6 +748,11 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
             peak_detection,
             shadow_length,
             acquisitor,
+            series_draw_valleys,
+            series_draw_valley_means,
+            series_draw_peaks,
+            series_draw_peak_means,
+            series_total_time,
         };
 
         let _config = get_old_handler_config(old_handler_signals).await;
@@ -741,8 +782,20 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
         if let Ok(length) = shadow_length.get().parse::<usize>() {
             (props.config.modify()).shadow_length = length;
         } else {
-            shadow_length.set("".to_string());
+            let old_shadow_len = props.config.get().shadow_length.to_string();
+            shadow_length.set(old_shadow_len);
         }
+    };
+
+    let update_series_total_time = move |_| {
+        if let Ok(total_time) = series_total_time.get().parse::<u64>() {
+            if (1..601).contains(&total_time) {
+                (props.config.modify()).time_series_config.total_time = total_time;
+                return;
+            }
+        }
+        let old_total_time = props.config.get().time_series_config.total_time.to_string();
+        series_total_time.set(old_total_time);
     };
 
     let acquisitor_select = move |_| {
@@ -799,16 +852,21 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
     };
 
     // Create effects ---------------------------------------------------------
+    // Apply config when it is updated
     create_effect(cx, move || {
-        // Apply config when it is updated
         props.config.track();
         spawn_local_scoped(cx, async move {
             if *props.config.get() != empty_handler_config() {
-                apply_handler_config((*props.config.get()).clone()).await;
+                let config = (*props.config.get()).clone();
+                props
+                    .global_series_total_time
+                    .set(config.time_series_config.total_time as i32);
+                apply_handler_config(config).await;
             }
         });
     });
 
+    // Update if the config was changed elsewhere (as in the drag zoom)
     create_effect(cx, move || {
         props.limits_change_flag.track();
         spawn_local_scoped(cx, async move {
@@ -824,6 +882,11 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
                     peak_detection,
                     shadow_length,
                     acquisitor,
+                    series_draw_valleys,
+                    series_draw_valley_means,
+                    series_draw_peaks,
+                    series_draw_peak_means,
+                    series_total_time,
                 };
 
                 let _config = get_old_handler_config(old_handler_signals).await;
@@ -832,6 +895,15 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
                 props.limits_change_flag.set(false);
             }
         });
+    });
+
+    // Update when a checkbox changes state
+    create_effect(cx, move || {
+        let mut config = props.config.modify();
+        config.time_series_config.draw_valleys = *series_draw_valleys.get();
+        config.time_series_config.draw_peaks = *series_draw_peaks.get();
+        config.time_series_config.draw_valley_means = *series_draw_valley_means.get();
+        config.time_series_config.draw_peak_means = *series_draw_peak_means.get();
     });
 
     // Render it --------------------------------------------------------------
@@ -850,7 +922,9 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
             }
 
             div(class="element") {
-                p { "Limites do comp. de onda:"}
+                p { "Limites do gráfico:"}
+                p(class="spacer") {}
+                p { "Comprimento de onda:"}
                 p {
                     input(
                         bind:value=wl_min,
@@ -864,10 +938,8 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
                     ) {}
                     "(nm)"
                 }
-            }
-
-            div(class="element") {
-                p { "Limites da potência:"}
+                p(class="spacer") {}
+                p { "Potência:"}
                 p {
                     input(
                         bind:value=pwr_min,
@@ -942,8 +1014,6 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
                 }
             }
 
-            // MARK Stopped in here. Did some preliminary styling. Now lets get
-            // the thing actually working
             div(class="element") {
                 p { "Série Temporal:"}
                 p (class="spacer") {}
@@ -951,14 +1021,16 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
                 p {
                     label(class="check-container") {
                         input(
-                            type="checkbox"
+                            type="checkbox",
+                            bind:checked=series_draw_valleys
                         ) {}
                         span(class="checkbox") {}
                         "Vales"
                     }
                     label(class="check-container") {
                         input(
-                            type="checkbox"
+                            type="checkbox",
+                            bind:checked=series_draw_valley_means
                         ) {}
                         span(class="checkbox") {}
                         "Médias V."
@@ -967,14 +1039,16 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
                 p {
                     label(class="check-container") {
                         input(
-                            type="checkbox"
+                            type="checkbox",
+                            bind:checked=series_draw_peaks
                         ) {}
                         span(class="checkbox") {}
                         "Picos"
                     }
                     label(class="check-container") {
                         input(
-                            type="checkbox"
+                            type="checkbox",
+                            bind:checked=series_draw_peak_means
                         ) {}
                         span(class="checkbox") {}
                         "Médias P."
@@ -984,7 +1058,9 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
                 p {"Tempo total:"}
                 p {
                     input(
-                        type="number"
+                        type="number",
+                        bind:value=series_total_time,
+                        on:focusout=update_series_total_time,
                     ) {}
                     "(s)"
                 }

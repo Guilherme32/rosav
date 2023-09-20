@@ -51,8 +51,6 @@ pub enum CriticalDetection {
     Lorentz { prominence: f64 },
 }
 
-// MARK Stopped here. We need to actually implement the config in the rest of
-// the front and also in the backend
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct TimeSeriesConfig {
     pub draw_valleys: bool,

@@ -35,7 +35,7 @@ pub struct TimeSeriesConfig {
     pub draw_valley_means: bool,
     pub draw_peaks: bool,
     pub draw_peak_means: bool,
-    pub total_time: u64,
+    pub total_time: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
