@@ -360,37 +360,37 @@ fn RenderTrace<'a, G: Html>(cx: Scope<'a>, props: RenderTraceProps<'a>) -> View<
 }
 
 async fn hide_all_traces(traces_list: &Signal<Vec<Trace>>) {
-    for mut trace in (*traces_list.modify()).iter_mut() {
+    for trace in (*traces_list.modify()).iter_mut() {
         trace.visible = false;
     }
 }
 
 async fn show_all_traces(traces_list: &Signal<Vec<Trace>>) {
-    for mut trace in (*traces_list.modify()).iter_mut() {
+    for trace in (*traces_list.modify()).iter_mut() {
         trace.visible = true;
     }
 }
 
 async fn hide_all_valleys(traces_list: &Signal<Vec<Trace>>) {
-    for mut trace in (*traces_list.modify()).iter_mut() {
+    for trace in (*traces_list.modify()).iter_mut() {
         trace.draw_valleys = false;
     }
 }
 
 async fn show_all_valleys(traces_list: &Signal<Vec<Trace>>) {
-    for mut trace in (*traces_list.modify()).iter_mut() {
+    for trace in (*traces_list.modify()).iter_mut() {
         trace.draw_valleys = true;
     }
 }
 
 async fn hide_all_means(traces_list: &Signal<Vec<Trace>>) {
-    for mut trace in (*traces_list.modify()).iter_mut() {
+    for trace in (*traces_list.modify()).iter_mut() {
         trace.draw_valleys_mean = false;
     }
 }
 
 async fn show_all_means(traces_list: &Signal<Vec<Trace>>) {
-    for mut trace in (*traces_list.modify()).iter_mut() {
+    for trace in (*traces_list.modify()).iter_mut() {
         trace.draw_valleys_mean = true;
     }
 }
@@ -691,6 +691,7 @@ async fn get_old_handler_config(signals: OldHandlerSignals<'_>) -> HandlerConfig
     match _config.acquisitor {
         AcquisitorSimple::FileReader => signals.acquisitor.set("file_reader".to_string()),
         AcquisitorSimple::Imon => signals.acquisitor.set("imon".to_string()),
+        AcquisitorSimple::Example => signals.acquisitor.set("example".to_string()),
     }
 
     _config
@@ -803,6 +804,7 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
         match (*acquisitor.get()).as_str() {
             "file_reader" => (props.config.modify()).acquisitor = AcquisitorSimple::FileReader,
             "imon" => (props.config.modify()).acquisitor = AcquisitorSimple::Imon,
+            "example" => (props.config.modify()).acquisitor = AcquisitorSimple::Example,
             _ => (),
         }
     };
@@ -1075,6 +1077,13 @@ fn RenderHandlerConfig<'a, G: Html>(cx: Scope<'a>, props: HandlerConfigProps<'a>
                 ) {
                     option(value="file_reader") { "Leitor de arquivos" }
                     option(value="imon") { "Ibsen IMON" }
+                    (
+                        if cfg!(feature = "example") {
+                            view!{cx, option(value="example") { "Aquisitor exemplo" } }
+                        } else {
+                            view!{cx, }
+                        }
+                    )
                 }
             }
         }
@@ -1147,7 +1156,10 @@ fn RenderAcquisitorConfig<'a, G: Html>(cx: Scope<'a>, props: AcquisitorConfigPro
             },
             AcquisitorSimple::Imon => view! { cx,
                 RenderImonConfig {}
-            }
+            },
+            AcquisitorSimple::Example => view! { cx,
+                RenderExampleConfig {}
+            },
         })
     }
 }

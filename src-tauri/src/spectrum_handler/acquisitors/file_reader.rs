@@ -1,9 +1,11 @@
+#![allow(refining_impl_trait)]
+
 use crate::{log_error, log_info, log_war, Log};
 
 use notify;
 use notify::{RecursiveMode, Watcher};
 use std::error::Error;
-use std::fs::{self, File};
+use std::fs::File;
 use std::io;
 use std::io::Read;
 use std::path::Path;
@@ -20,6 +22,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::spectrum::*;
 use crate::spectrum_handler::{SpectrumHandler, State};
+use crate::spectrum_handler::acquisitors::{AcquisitorTrait, auto_save_spectrum};
 
 // Region: Main declarations ---------------------------------------------------
 
@@ -92,8 +95,8 @@ pub enum FileReaderError {
 
 // Region: required impls ------------------------------------------------------
 
-impl FileReader {
-    pub fn connect(&self) -> Result<(), FileReaderError> {
+impl AcquisitorTrait for FileReader {
+    fn connect(&self) -> Result<(), FileReaderError> {
         let mut state = self.state.lock().unwrap();
 
         match *state {
@@ -146,7 +149,7 @@ impl FileReader {
         Ok(())
     }
 
-    pub fn disconnect(&self) -> Result<(), FileReaderError> {
+    fn disconnect(&self) -> Result<(), FileReaderError> {
         let mut state = self.state.lock().unwrap();
 
         if let ReaderState::Disconnected = *state {
@@ -163,7 +166,7 @@ impl FileReader {
         Ok(())
     }
 
-    pub fn start_reading(
+    fn start_reading(
         &self,
         handler: &SpectrumHandler,
         single_read: bool,
@@ -247,7 +250,7 @@ impl FileReader {
         Ok(())
     }
 
-    pub fn stop_reading(&self) -> Result<(), FileReaderError> {
+    fn stop_reading(&self) -> Result<(), FileReaderError> {
         let mut state = self.state.lock().unwrap();
 
         match *state {
@@ -267,7 +270,7 @@ impl FileReader {
         Ok(())
     }
 
-    pub fn get_simplified_state(&self) -> State {
+    fn get_simplified_state(&self) -> State {
         let state = self.state.lock().unwrap();
 
         match *state {
@@ -339,30 +342,12 @@ fn read_file_event(event: &notify::Event) -> Result<String, Box<dyn Error>> {
     Err(Box::new(io::Error::from_raw_os_error(32)))
 }
 
-fn auto_save_spectrum(spectrum: &Spectrum, folder_path: &Path) -> Result<u32, Box<dyn Error>> {
-    fs::create_dir_all(folder_path)?;
-
-    for i in 0..100_000 {
-        let new_path = folder_path.join(format!("spectrum{:03}.txt", i));
-        if !new_path.exists() {
-            spectrum.save(&new_path)?;
-            return Ok(i);
-        }
-    }
-
-    Err(Box::new(io::Error::new(
-        io::ErrorKind::Other,
-        "Overflow de espectros,\
-        o programa só suporta até 'spectrum99999'",
-    )))
-}
-
 fn watcher_callback<T: std::fmt::Debug>(
     response: Result<notify::Event, T>,
     last_spectrum: Arc<Mutex<Option<Spectrum>>>,
     new_spectrum: Arc<AtomicBool>,
     saving: Arc<AtomicBool>,
-    auto_save_path: &Path,
+    auto_save_path: &PathBuf,
     log_tx: Arc<SyncSender<Log>>,
 ) -> Result<(), ()> {
     let event = match response {
@@ -410,17 +395,7 @@ fn watcher_callback<T: std::fmt::Debug>(
     };
 
     if saving.load(atomic::Ordering::Relaxed) {
-        match auto_save_spectrum(&spectrum, auto_save_path) {
-            Ok(num) => log_info(&log_tx, format!("[FWC] Espectro {:03} salvo", num)),
-            Err(error) => log_error(
-                &log_tx,
-                format!(
-                    "[FWC] Não foi possível \
-                salvar o espectro novo ({})",
-                    error
-                ),
-            ),
-        }
+        let _ = auto_save_spectrum(&spectrum, auto_save_path);
     }
 
     let mut last_spectrum = last_spectrum.lock().unwrap();

@@ -175,3 +175,135 @@ pub fn RenderImonConfig<G: Html>(cx: Scope) -> View<G> {
         }
     }
 }
+
+#[component]
+pub fn RenderExampleConfig<G: Html>(cx: Scope) -> View<G> {
+    let config = create_signal(cx, empty_example_config());
+
+    let points = create_signal(cx, String::new());
+    let amplitude = create_signal(cx, String::new());
+    let phase_t_speed = create_signal(cx, String::new());
+    let phase_x_speed = create_signal(cx, String::new());
+    let update_delay_millis = create_signal(cx, String::new());
+
+    spawn_local_scoped(cx, async move {
+        // Get old config. Retries a few times
+        for _ in 0..3 {
+            let _config = get_acquisitor_config().await;
+
+            if let AcquisitorConfig::ExampleConfig(_config) = _config {
+                points.set(_config.points.to_string());
+                amplitude.set(_config.amplitude.to_string());
+                phase_t_speed.set(_config.phase_t_speed.to_string());
+                phase_x_speed.set(_config.phase_x_speed.to_string());
+                update_delay_millis.set(_config.update_delay_millis.to_string());
+
+                config.set(_config);
+                return;
+            }
+        }
+    });
+
+    create_effect(cx, move || {
+        // Apply config when it is updated
+        config.track();
+        spawn_local_scoped(cx, async move {
+            if *config.get() != empty_example_config() {
+                apply_acquisitor_config(AcquisitorConfig::ExampleConfig((*config.get()).clone()))
+                    .await;
+            }
+        });
+    });
+
+    // Check if should send the config on input update
+    let update_config = |event: rt::Event| {
+        event.prevent_default();
+
+        let mut config = config.modify();
+
+        match (*points.get()).parse::<u64>() {
+            Ok(value) => config.points = value,
+            Err(_) => points.set(config.points.to_string()),
+        }
+
+        match (*amplitude.get()).parse::<f64>() {
+            Ok(value) => config.amplitude = value,
+            _ => amplitude.set(config.amplitude.to_string()),
+        }
+
+        match (*phase_t_speed.get()).parse::<f64>() {
+            Ok(value) => config.phase_t_speed = value,
+            _ => phase_t_speed.set(config.phase_t_speed.to_string()),
+        }
+
+        match (*phase_x_speed.get()).parse::<f64>() {
+            Ok(value) => config.phase_x_speed = value,
+            _ => phase_x_speed.set(config.phase_x_speed.to_string()),
+        }
+
+        match (*update_delay_millis.get()).parse::<u64>() {
+            Ok(value) => config.update_delay_millis = value,
+            Err(_) => update_delay_millis.set(config.update_delay_millis.to_string()),
+        }
+    };
+
+    view! { cx,
+        form(on:submit=form_blur) {
+            input(type="submit", style="display: none;")
+
+            p(class="mini-title") {
+                p { "Aquisitor" }
+                p { "(Example) "}
+            }
+
+            div(class="element") {
+                p { "Densidade: " }
+                input(
+                    bind:value=points,
+                    type="number",
+                    on:focusout=update_config
+                ) {}
+                "pontos"
+            }
+
+            div(class="element") {
+                p { "Amplitude: " }
+                input(
+                    bind:value=amplitude,
+                    on:input=|_| check_number_input(amplitude),
+                    on:focusout=update_config
+                ) {}
+            }
+
+            div(class="element") {
+                p { "Velocidade angular em t: " }
+                input(
+                    bind:value=phase_t_speed,
+                    on:input=|_| check_number_input(phase_t_speed),
+                    on:focusout=update_config
+                ) {}
+                "rad/s"
+            }
+
+            div(class="element") {
+                p { "Velocidade angular em x: " }
+                input(
+                    bind:value=phase_x_speed,
+                    on:input=|_| check_number_input(phase_x_speed),
+                    on:focusout=update_config
+                ) {}
+                "rad/un"
+            }
+
+            div(class="element") {
+                p { "Delay entre leituras: " }
+                input(
+                    bind:value=update_delay_millis,
+                    type="number",
+                    on:focusout=update_config
+                ) {}
+                "ms"
+            }
+        }
+    }
+}

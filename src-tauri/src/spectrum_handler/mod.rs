@@ -24,7 +24,8 @@ use time_series::TimeSeriesGroup;
 use acquisitors::{
     file_reader::{FileReader, FileReaderConfig},
     ibsen_imon::{Imon, ImonConfig},
-    load_acquisitor,
+    example::{Example, ExampleConfig},
+    load_acquisitor, AcquisitorTrait
 };
 
 use self::time_series::{TimeSeriesGroupPaths, TimedEntry};
@@ -75,18 +76,21 @@ pub enum State {
 pub enum AcquisitorSimple {
     FileReader,
     Imon,
+    Example
 }
 
 #[derive(Debug)]
 pub enum Acquisitor {
     FileReader(FileReader),
     Imon(Imon),
+    Example(Example)
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum AcquisitorConfig {
     FileReaderConfig(FileReaderConfig),
     ImonConfig(ImonConfig),
+    ExampleConfig(ExampleConfig)
 }
 
 // Region: Acquisitor interface ------------------------------------------------
@@ -94,9 +98,11 @@ pub enum AcquisitorConfig {
 impl SpectrumHandler {
     pub fn connect(&self) -> Result<(), Box<dyn Error>> {
         let acquisitor = self.acquisitor.lock().unwrap();
+
         match &*acquisitor {
             Acquisitor::FileReader(file_reader) => file_reader.connect()?,
             Acquisitor::Imon(imon) => imon.connect()?,
+            Acquisitor::Example(example) => example.connect()?,
         }
 
         Ok(())
@@ -107,6 +113,7 @@ impl SpectrumHandler {
         match &*acquisitor {
             Acquisitor::FileReader(file_reader) => file_reader.disconnect()?,
             Acquisitor::Imon(imon) => imon.disconnect()?,
+            Acquisitor::Example(example) => example.disconnect()?,
         }
 
         Ok(())
@@ -117,6 +124,7 @@ impl SpectrumHandler {
         match &*acquisitor {
             Acquisitor::FileReader(file_reader) => file_reader.start_reading(self, false)?,
             Acquisitor::Imon(imon) => imon.start_reading(self, false)?,
+            Acquisitor::Example(example) => example.start_reading(self, false)?,
         }
 
         Ok(())
@@ -127,6 +135,7 @@ impl SpectrumHandler {
         match &*acquisitor {
             Acquisitor::FileReader(file_reader) => file_reader.start_reading(self, true)?,
             Acquisitor::Imon(imon) => imon.start_reading(self, true)?,
+            Acquisitor::Example(example) => example.start_reading(self, true)?,
         }
 
         Ok(())
@@ -137,6 +146,7 @@ impl SpectrumHandler {
         match &*acquisitor {
             Acquisitor::FileReader(file_reader) => file_reader.stop_reading()?,
             Acquisitor::Imon(imon) => imon.stop_reading()?,
+            Acquisitor::Example(example) => example.stop_reading()?,
         }
 
         Ok(())
@@ -147,6 +157,7 @@ impl SpectrumHandler {
         match &*acquisitor {
             Acquisitor::FileReader(file_reader) => file_reader.get_simplified_state(),
             Acquisitor::Imon(imon) => imon.get_simplified_state(),
+            Acquisitor::Example(example) => example.get_simplified_state(),
         }
     }
 }
@@ -666,6 +677,17 @@ impl SpectrumHandler {
                     );
                 }
             }
+            Acquisitor::Example(example) => {
+                if let AcquisitorConfig::ExampleConfig(new_config) = new_config {
+                    example.update_config(new_config);
+                } else {
+                    self.log_error(
+                        "[HUQ] Configuração incompatível, era esperado \
+                        receber ExampleConfig"
+                            .to_string(),
+                    );
+                }
+            }
         }
     }
 
@@ -677,6 +699,7 @@ impl SpectrumHandler {
                 AcquisitorConfig::FileReaderConfig(file_reader.get_config())
             }
             Acquisitor::Imon(imon) => AcquisitorConfig::ImonConfig(imon.get_config()),
+            Acquisitor::Example(example) => AcquisitorConfig::ExampleConfig(example.get_config()),
         }
     }
 }

@@ -154,7 +154,7 @@ pub fn get_last_spectrum_path(
     handler.update_limits();
     handler
         .get_last_spectrum_path(get_svg_size(window))
-        .unwrap_or(String::new())
+        .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -163,7 +163,7 @@ pub async fn get_last_spectrum_valleys_points(
     window: tauri::Window,
 ) -> Result<Vec<(f64, f64)>, ()> {
     let points = handler.get_last_spectrum_valleys_points(get_svg_size(window));
-    Ok(points.unwrap_or(vec![]))
+    Ok(points.unwrap_or_default())
 }
 
 #[tauri::command]
@@ -172,7 +172,7 @@ pub async fn get_last_spectrum_peaks_points(
     window: tauri::Window,
 ) -> Result<Vec<(f64, f64)>, ()> {
     let points = handler.get_last_spectrum_peaks_points(get_svg_size(window));
-    Ok(points.unwrap_or(vec![]))
+    Ok(points.unwrap_or_default())
 }
 
 #[tauri::command]
@@ -206,7 +206,7 @@ pub fn get_frozen_spectrum_path(
 ) -> String {
     handler
         .get_frozen_spectrum_path(id, get_svg_size(window))
-        .unwrap_or(String::new())
+        .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -216,7 +216,7 @@ pub async fn get_frozen_spectrum_valleys_points(
     window: tauri::Window,
 ) -> Result<Vec<(f64, f64)>, ()> {
     let points = handler.get_frozen_spectrum_valleys_points(id, get_svg_size(window));
-    Ok(points.unwrap_or(vec![]))
+    Ok(points.unwrap_or_default())
 }
 
 #[tauri::command]
@@ -226,7 +226,7 @@ pub async fn get_frozen_spectrum_peaks_points(
     window: tauri::Window,
 ) -> Result<Vec<(f64, f64)>, ()> {
     let points = handler.get_frozen_spectrum_peaks_points(id, get_svg_size(window));
-    Ok(points.unwrap_or(vec![]))
+    Ok(points.unwrap_or_default())
 }
 
 #[tauri::command]
@@ -245,13 +245,13 @@ pub fn save_frozen_spectrum(
             .set_parent(&window)
             .save_file(move |path| {
                 if let Some(path) = path {
-                    return match spectrum.save(&path) {
+                    match spectrum.save(&path) {
                         Ok(_) => log_info(&log_tx, format!("[ASF] Espectro {} salvo", id)),
                         Err(error) => log_error(
                             &log_tx,
                             format!("[ASF] falha ao salvar espectro {} ({})", id, error),
                         ),
-                    };
+                    }
                 }
             });
     }

@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use home::home_dir;
 use toml;
 
+use crate::spectrum_handler::acquisitors::example::ExampleConfig;
 use crate::spectrum_handler::{
     acquisitors::{file_reader::FileReaderConfig, ibsen_imon::ImonConfig},
     AcquisitorConfig, AcquisitorSimple, HandlerConfig,
@@ -53,6 +54,7 @@ pub fn load_acquisitor_config(
             load_file_reader_config()?,
         )),
         AcquisitorSimple::Imon => Ok(AcquisitorConfig::ImonConfig(load_imon_config()?)),
+        AcquisitorSimple::Example => Ok(AcquisitorConfig::ExampleConfig(load_example_config()?)),
     }
 }
 
@@ -60,6 +62,7 @@ pub fn write_acquisitor_config(config: &AcquisitorConfig) -> Result<(), Box<dyn 
     match config {
         AcquisitorConfig::FileReaderConfig(config) => write_file_reader_config(config),
         AcquisitorConfig::ImonConfig(config) => write_imon_config(config),
+        AcquisitorConfig::ExampleConfig(config) => write_example_config(config),
     }
 }
 
@@ -94,7 +97,7 @@ pub fn write_file_reader_config(config: &FileReaderConfig) -> Result<(), Box<dyn
     Ok(())
 }
 
-// Subregion: imon config -----------------------------------------------
+// Subregion: imon config -----------------------------------------------------
 
 pub fn imon_config_path() -> PathBuf {
     let home = match home_dir() {
@@ -114,6 +117,36 @@ pub fn load_imon_config() -> Result<ImonConfig, Box<dyn Error>> {
 
 pub fn write_imon_config(config: &ImonConfig) -> Result<(), Box<dyn Error>> {
     let config_path = imon_config_path();
+
+    if let Some(parent) = config_path.parent() {
+        // Enforces the parent folder
+        create_dir_all(parent)?;
+    }
+    write(&config_path, toml::to_string(config)?)?;
+
+    Ok(())
+}
+
+// Subregion: example config --------------------------------------------------
+
+pub fn example_config_path() -> PathBuf {
+    let home = match home_dir() {
+        Some(path) => path,
+        None => Path::new("./").to_path_buf(), // If can't find home, uses config on pwd
+    };
+
+    home.join(".config/rosav/example_acq.toml")
+}
+
+pub fn load_example_config() -> Result<ExampleConfig, Box<dyn Error>> {
+    let text = read_to_string(example_config_path())?;
+    let config: ExampleConfig = toml::from_str(&text)?;
+
+    Ok(config)
+}
+
+pub fn write_example_config(config: &ExampleConfig) -> Result<(), Box<dyn Error>> {
+    let config_path = example_config_path();
 
     if let Some(parent) = config_path.parent() {
         // Enforces the parent folder

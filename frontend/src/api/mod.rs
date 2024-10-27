@@ -345,13 +345,6 @@ pub async fn acquisitor_stop_reading() {
     invoke("acquisitor_stop_reading", to_value(&()).unwrap()).await;
 }
 
-// pub async fn pick_folder() -> Option<PathBuf> {
-//     let from_back = invoke("pick_folder", to_value(&()).unwrap()).await;
-//     let obj_rebuilt: Option<PathBuf> = from_value(from_back).unwrap();
-
-//     obj_rebuilt
-// }
-
 pub async fn get_handler_config() -> HandlerConfig {
     let from_back = invoke("get_handler_config", to_value(&()).unwrap()).await;
     let obj_rebuilt: HandlerConfig = from_value(from_back).unwrap();

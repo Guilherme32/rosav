@@ -1,8 +1,8 @@
+#![allow(refining_impl_trait)]
+
 use crate::{log_error, log_info, log_war, Log};
 
 use std::error::Error;
-use std::fs;
-use std::io;
 use std::io::Read;
 
 use std::path::PathBuf;
@@ -20,12 +20,35 @@ use serialport::{
 
 use crate::spectrum::*;
 use crate::spectrum_handler::{SpectrumHandler, State};
+use crate::spectrum_handler::acquisitors::{auto_save_spectrum, AcquisitorTrait};
 
 // TODO use a trait to make the integration of new acquistors easier
 
 // TODO refatorar o código pra deixar mais bunitinho
 
 // Region: Main declarations ---------------------------------------------------
+
+#[derive(Debug)]
+enum ImonState {
+    Disconnected,
+    Connected(ConnectedImon),
+    Reading(ReadingImon),
+}
+
+#[derive(Debug, Clone)]
+struct ConnectedImon {
+    port: Arc<Mutex<Box<dyn SerialPort>>>,
+    n_pixels: u32,
+    coefficients: ImonCoefficients,
+    dark_pixels: Vec<u32>,
+}
+
+#[derive(Debug)]
+struct ReadingImon {
+    connected_imon: ConnectedImon,
+    config_tx: mpsc::Sender<ImonConfig>,
+}
+
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ImonConfig {
@@ -65,27 +88,6 @@ pub fn default_config() -> ImonConfig {
 pub struct ImonCoefficients {
     pub wavelength: [f64; 6],
     pub temperature: [f64; 4],
-}
-
-#[derive(Debug)]
-enum ImonState {
-    Disconnected,
-    Connected(ConnectedImon),
-    Reading(ReadingImon),
-}
-
-#[derive(Debug, Clone)]
-struct ConnectedImon {
-    port: Arc<Mutex<Box<dyn SerialPort>>>,
-    n_pixels: u32,
-    coefficients: ImonCoefficients,
-    dark_pixels: Vec<u32>,
-}
-
-#[derive(Debug)]
-struct ReadingImon {
-    connected_imon: ConnectedImon,
-    config_tx: mpsc::Sender<ImonConfig>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -135,8 +137,8 @@ pub enum ImonError {
 
 // Region: required impls ------------------------------------------------------
 
-impl Imon {
-    pub fn connect(&self) -> Result<(), Box<dyn Error>> {
+impl AcquisitorTrait for Imon {
+    fn connect(&self) -> Result<(), ImonError> {
         let mut state = self.state.lock().unwrap();
         let config = self.config.lock().unwrap();
 
@@ -148,7 +150,7 @@ impl Imon {
                     está conectado"
                         .to_string(),
                 );
-                return Err(Box::new(ImonError::ImonAlreadyConnected));
+                return Err(ImonError::ImonAlreadyConnected);
             }
         }
 
@@ -160,7 +162,7 @@ impl Imon {
                     ({})",
                     err
                 ));
-                return Err(err);
+                return Err(ImonError::ImonNotFound);
             }
         };
 
@@ -172,7 +174,7 @@ impl Imon {
                     dos parâmetros do IMON ({})",
                     err
                 ));
-                return Err(err);
+                return Err(ImonError::ParseError);
             }
         };
 
@@ -189,7 +191,7 @@ impl Imon {
         Ok(())
     }
 
-    pub fn disconnect(&self) -> Result<(), ImonError> {
+    fn disconnect(&self) -> Result<(), ImonError> {
         let mut state = self.state.lock().unwrap();
 
         if let ImonState::Disconnected = &*state {
@@ -206,7 +208,7 @@ impl Imon {
         Ok(())
     }
 
-    pub fn start_reading(
+    fn start_reading(
         &self,
         handler: &SpectrumHandler,
         single_read: bool,
@@ -264,7 +266,7 @@ impl Imon {
         Ok(())
     }
 
-    pub fn stop_reading(&self) -> Result<(), ImonError> {
+    fn stop_reading(&self) -> Result<(), ImonError> {
         let mut state = self.state.lock().unwrap();
 
         match &*state {
@@ -284,7 +286,7 @@ impl Imon {
         }
     }
 
-    pub fn get_simplified_state(&self) -> State {
+    fn get_simplified_state(&self) -> State {
         let state = self.state.lock().unwrap();
 
         match &*state {
@@ -706,24 +708,6 @@ fn check_ack(port: &mut Box<dyn SerialPort>) -> Result<(), Box<dyn Error>> {
     }
 
     Err(Box::new(ImonError::UnexpectedResponse)) // Found neither
-}
-
-fn auto_save_spectrum(spectrum: &Spectrum, folder_path: &PathBuf) -> Result<u32, Box<dyn Error>> {
-    fs::create_dir_all(folder_path)?;
-
-    for i in 0..100_000 {
-        let new_path = folder_path.join(format!("spectrum{:03}.txt", i));
-        if !new_path.exists() {
-            spectrum.save(&new_path)?;
-            return Ok(i);
-        }
-    }
-
-    Err(Box::new(io::Error::new(
-        io::ErrorKind::Other,
-        "Overflow de espectros,\
-        o programa só suporta até 'spectrum99999'",
-    )))
 }
 
 // Region: Spectrum creation ---------------------------------------------------
